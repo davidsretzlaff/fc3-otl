@@ -1,6 +1,5 @@
 package main
 
-
 import (
 	"io/ioutil"
 	"log"
@@ -30,23 +29,22 @@ func main() {
 	http.ListenAndServe(":8888", router)
 }
 
-
 func homeHandler(writer http.ResponseWriter, request *http.Request) {
 	ctx := baggage.ContextWithoutBaggage(request.Context())
 
-	// routine 1 - Process File
+	// rotina 1 - Process File
 	ctx, processFile := tracer.Start(ctx, "process-file")
 	time.Sleep(time.Millisecond * 100)
 	processFile.End()
 
-	// routine 2 - do Request HTTP
+	// rotina 2 - Fazer Request HTTP
 	ctx, httpCall := tracer.Start(ctx, "request-remote-json")
 	client := http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
-	req, err := http.NewRequestWithContext(ctx, "GET", "http://localhost:3000/", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", "http://localhost:8080/MyController", nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-	res, err := client.Do(req) // call the request
+	res, err := client.Do(req) // chamo a requisição
 
 	if err != nil {
 		log.Fatalln(err)
@@ -58,11 +56,10 @@ func homeHandler(writer http.ResponseWriter, request *http.Request) {
 	time.Sleep(time.Millisecond * 300)
 	httpCall.End()
 
-	// routine 3 - show result
+	// rotina 3 - Exibir resultado
 	ctx, renderContent := tracer.Start(ctx, "render-content")
 	time.Sleep(time.Millisecond * 100)
 	writer.WriteHeader(http.StatusOK)
 	writer.Write([]byte(body))
 	renderContent.End()
 }
-
