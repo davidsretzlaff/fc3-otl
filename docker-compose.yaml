@@ -1,0 +1,25 @@
+services:
+  zipkin:
+    image: openzipkin/zipkin
+    container_name: zipkin
+    ports:
+    - 9411:9411
+
+  goapp:
+    build:
+      context: ./goapp
+      dockerfile: Dockerfile
+    ports:
+      - "8888:8888"
+    depends_on:
+      - netcoreapp
+
+
+  netcoreapp:
+    build:
+      context: ./netcoreapp/app-otl
+      dockerfile: Dockerfile
+    ports:
+      - 8080:80
+    depends_on:
+      - zipkin

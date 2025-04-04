@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
 using OpenTelemetry.Trace;
 using System.Diagnostics;
+using System.Text.Json;
 
 [ApiController]
 [Route("MyController")]
@@ -24,7 +25,10 @@ public class MyController : ControllerBase
         using var connection = new SqliteConnection("Data Source=mydatabase.db");
         var result = await connection.QueryAsync("SELECT * FROM MyTable");
 
-        span.SetAttribute("response", "Sending response");
+        // Serialize result to JSON before adding to trace
+        string serializedResult = JsonSerializer.Serialize(result);
+        span.SetAttribute("response", serializedResult);
+
         return Ok(result);
     }
 }

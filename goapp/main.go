@@ -40,7 +40,7 @@ func homeHandler(writer http.ResponseWriter, request *http.Request) {
 	// rotina 2 - Fazer Request HTTP
 	ctx, httpCall := tracer.Start(ctx, "request-remote-json")
 	client := http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
-	req, err := http.NewRequestWithContext(ctx, "GET", "http://localhost:8080/MyController", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", "http://netcoreapp:8080/MyController", nil)
 	if err != nil {
 		log.Fatal(err)
 	}
