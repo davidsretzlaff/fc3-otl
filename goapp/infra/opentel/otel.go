@@ -1,51 +1,75 @@
 package opentel
 
 import (
+	"context"
 	"log"
-	"os"
 
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/zipkin"
-	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 type OpenTel struct {
-	ServiceName      string
-	ServiceVersion   string
+	ServiceName    string
+	ServiceVersion string
 	ExporterEndpoint string
+	tracerProvider *sdktrace.TracerProvider
+	propagator     propagation.TextMapPropagator
 }
 
 func NewOpenTel() *OpenTel {
-	return &OpenTel{}
+	return &OpenTel{
+		propagator: propagation.NewCompositeTextMapPropagator(
+			propagation.TraceContext{},
+			propagation.Baggage{},
+		),
+	}
 }
 
-func (o *OpenTel) GetTracer() trace.Tracer {
-	var logger = log.New(os.Stderr, "zipkin-example", log.Ldate|log.Ltime|log.Llongfile)
-	exporter, err := zipkin.New(
-		o.ExporterEndpoint,
-		zipkin.WithLogger(logger),
-		zipkin.WithSDKOptions(sdktrace.WithSampler(sdktrace.AlwaysSample())),
-	)
+func (ot *OpenTel) GetTracerProvider() *sdktrace.TracerProvider {
+	return ot.tracerProvider
+}
+
+func (ot *OpenTel) GetPropagators() propagation.TextMapPropagator {
+	return ot.propagator
+}
+
+func (ot *OpenTel) GetTracer() trace.Tracer {
+	ctx := context.Background()
+
+	// Configure the OTLP exporter
+	opts := []otlptracehttp.Option{
+		otlptracehttp.WithEndpoint(ot.ExporterEndpoint),
+		otlptracehttp.WithInsecure(), // This is important to use HTTP instead of HTTPS
+	}
+
+	client := otlptracehttp.NewClient(opts...)
+	exporter, err := otlptrace.New(ctx, client)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	batcher := sdktrace.NewBatchSpanProcessor(exporter)
-
-	tp := sdktrace.NewTracerProvider(
-		sdktrace.WithSpanProcessor(batcher),
-		sdktrace.WithResource(resource.NewWithAttributes(
-			semconv.SchemaURL,
-			semconv.ServiceNameKey.String("GO-service"),
-		)),
+	// Configure the resource
+	res := resource.NewWithAttributes(
+		semconv.SchemaURL,
+		semconv.ServiceNameKey.String(ot.ServiceName),
+		semconv.ServiceVersionKey.String(ot.ServiceVersion),
 	)
-	otel.SetTracerProvider(tp)
-	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 
-	tracer := otel.Tracer("io.opentelemetry.traces.goapp")
-	return tracer
+	// Configure the tracer provider
+	ot.tracerProvider = sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exporter),
+		sdktrace.WithResource(res),
+	)
+
+	// Set the global tracer provider
+	otel.SetTracerProvider(ot.tracerProvider)
+	otel.SetTextMapPropagator(ot.propagator)
+
+	return ot.tracerProvider.Tracer(ot.ServiceName)
 }

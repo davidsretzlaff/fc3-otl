@@ -1,5 +1,5 @@
 # Use a newer Go version
-FROM golang:1.20 AS build
+FROM golang:1.23 AS build
 
 # Set working directory
 WORKDIR /app
@@ -15,7 +15,7 @@ COPY . .
 RUN go build -o goapp .
 
 # Create a smaller final image
-FROM golang:1.20
+FROM golang:1.23
 WORKDIR /app
 COPY --from=build /app/goapp .
 

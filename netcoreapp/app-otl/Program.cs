@@ -12,15 +12,22 @@ builder.Services.AddOpenTelemetry()
     .WithTracing(tracerProviderBuilder =>
     {
         tracerProviderBuilder
-            .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("MyService"))
+            .SetResourceBuilder(ResourceBuilder.CreateDefault()
+                .AddService("DotNetService"))
             .AddAspNetCoreInstrumentation()
             .AddHttpClientInstrumentation()
             .AddSqlClientInstrumentation()
-            .AddZipkinExporter(options =>
+            .AddSource("MyController")
+            .AddOtlpExporter(options =>
             {
-                options.Endpoint = new Uri("http://localhost:9411/api/v2/spans");
+                options.Endpoint = new Uri("http://jaeger:4318/v1/traces");
+                options.Protocol = OpenTelemetry.Exporter.OtlpExportProtocol.HttpProtobuf;
             });
     });
+
+// Register Tracer
+builder.Services.AddSingleton<Tracer>(sp => 
+    sp.GetRequiredService<TracerProvider>().GetTracer("MyController"));
 
 var app = builder.Build();
 
@@ -38,8 +45,6 @@ app.UseRouting();
 app.UseAuthorization();
 
 app.MapControllers();
-
-// Add a simple root endpoint
 app.MapGet("/", () => "Hello World!");
 
 app.Run("http://0.0.0.0:80");
@@ -65,7 +70,7 @@ void InitializeDatabase()
     if (count == 0)
     {
         // Insert 10 initial records
-        for (int i = 1; i <= 10; i++)
+        for (int i = 1; i <= 3; i++)
         {
             command.CommandText = $@"
                 INSERT INTO MyTable (Name) VALUES ('Initial Data {i}');
@@ -74,4 +79,3 @@ void InitializeDatabase()
         }
     }
 }
-

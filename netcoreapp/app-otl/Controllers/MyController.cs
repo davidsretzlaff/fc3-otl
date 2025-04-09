@@ -1,34 +1,36 @@
-﻿using Dapper;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
+using Dapper;
+using System.Text.Json;
 using OpenTelemetry.Trace;
 using System.Diagnostics;
-using System.Text.Json;
 
-[ApiController]
-[Route("MyController")]
-public class MyController : ControllerBase
+namespace app_otl.Controllers
 {
-    private readonly Tracer _tracer;
-
-    public MyController(TracerProvider tracerProvider)
+    [ApiController]
+    [Route("MyController")]
+    public class MyController : ControllerBase
     {
-        _tracer = tracerProvider.GetTracer("MyController");
-    }
+        private readonly Tracer _tracer;
 
-    [HttpGet]
-    public async Task<IActionResult> Get()
-    {
-        using var span = _tracer.StartActiveSpan("GetEndpoint");
-        span.SetAttribute("request", "Received request");
+        public MyController(Tracer tracer)
+        {
+            _tracer = tracer;
+        }
 
-        using var connection = new SqliteConnection("Data Source=mydatabase.db");
-        var result = await connection.QueryAsync("SELECT * FROM MyTable");
+        [HttpGet]
+        public async Task<IActionResult> Get()
+        {
+            using var span = _tracer.StartActiveSpan("GetEndpoint");
+            span.SetAttribute("request", "Received request");
 
-        // Serialize result to JSON before adding to trace
-        string serializedResult = JsonSerializer.Serialize(result);
-        span.SetAttribute("response", serializedResult);
+            using var connection = new SqliteConnection("Data Source=mydatabase.db");
+            var result = await connection.QueryAsync("SELECT * FROM MyTable");
 
-        return Ok(result);
+            string serializedResult = JsonSerializer.Serialize(result);
+            span.SetAttribute("response", serializedResult);
+
+            return Ok(result);
+        }
     }
 }

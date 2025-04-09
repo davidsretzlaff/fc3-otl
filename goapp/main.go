@@ -10,8 +10,10 @@ import (
 	"github.com/gorilla/mux"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"go.opentelemetry.io/otel/baggage"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/baggage"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 var tracer trace.Tracer
@@ -20,11 +22,15 @@ func main() {
 	ot := opentel.NewOpenTel()
 	ot.ServiceName = "GoApp"
 	ot.ServiceVersion = "0.1"
-	ot.ExporterEndpoint = "http://localhost:9411/api/v2/spans"
+	ot.ExporterEndpoint = "jaeger:4318"
+
 	tracer = ot.GetTracer()
 
 	router := mux.NewRouter()
-	router.Use(otelmux.Middleware(ot.ServiceName))
+	router.Use(otelmux.Middleware(ot.ServiceName, 
+		otelmux.WithTracerProvider(ot.GetTracerProvider()),
+		otelmux.WithPropagators(ot.GetPropagators()),
+	))
 	router.HandleFunc("/", homeHandler)
 	http.ListenAndServe(":8888", router)
 }
@@ -40,18 +46,24 @@ func homeHandler(writer http.ResponseWriter, request *http.Request) {
 	// rotina 2 - Fazer Request HTTP
 	ctx, httpCall := tracer.Start(ctx, "request-remote-json")
 	client := http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
-	req, err := http.NewRequestWithContext(ctx, "GET", "http://netcoreapp:8080/MyController", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", "http://netcoreapp:80/MyController", nil)
 	if err != nil {
 		log.Fatal(err)
 	}
 	res, err := client.Do(req) // chamo a requisição
 
 	if err != nil {
-		log.Fatalln(err)
+		log.Printf("Erro ao fazer requisição: %v", err)
+		writer.WriteHeader(http.StatusInternalServerError)
+		return
 	}
+	defer res.Body.Close()
+
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		log.Fatalln(err)
+		log.Printf("Erro ao ler resposta: %v", err)
+		writer.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 	time.Sleep(time.Millisecond * 300)
 	httpCall.End()
@@ -60,6 +72,6 @@ func homeHandler(writer http.ResponseWriter, request *http.Request) {
 	ctx, renderContent := tracer.Start(ctx, "render-content")
 	time.Sleep(time.Millisecond * 100)
 	writer.WriteHeader(http.StatusOK)
-	writer.Write([]byte(body))
+	writer.Write(body)
 	renderContent.End()
 }
