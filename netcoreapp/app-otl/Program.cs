@@ -1,31 +1,50 @@
 using Microsoft.Data.Sqlite;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using app_otl.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllers();
 
-// Configure OpenTelemetry
+// Configuração do OpenTelemetry
 builder.Services.AddOpenTelemetry()
     .WithTracing(tracerProviderBuilder =>
     {
         tracerProviderBuilder
+            // Configura o recurso (informações sobre o serviço)
             .SetResourceBuilder(ResourceBuilder.CreateDefault()
-                .AddService("DotNetService"))
+                .AddService("DotNetService"))  // Nome do serviço que aparecerá no Jaeger
+            
+            // Adiciona instrumentação automática para ASP.NET Core
+            // Isso cria spans automaticamente para requisições HTTP
             .AddAspNetCoreInstrumentation()
+            
+            // Adiciona instrumentação para chamadas HTTP (HttpClient)
+            // Isso cria spans para chamadas HTTP que seu serviço faz
             .AddHttpClientInstrumentation()
+            
+            // Adiciona instrumentação para SQL
+            // Isso cria spans para operações no banco de dados
             .AddSqlClientInstrumentation()
+            
+            // Adiciona o source "MyController" para criar spans manuais
+            // Isso permite criar spans personalizados no MyController
             .AddSource("MyController")
+            
+            // Configura o exportador OTLP para enviar traces ao Jaeger
             .AddOtlpExporter(options =>
             {
+                // Endpoint do Jaeger para enviar os traces
                 options.Endpoint = new Uri("http://jaeger:4318/v1/traces");
+                // Protocolo HTTP com Protobuf
                 options.Protocol = OpenTelemetry.Exporter.OtlpExportProtocol.HttpProtobuf;
             });
     });
 
-// Register Tracer
+// Registra o Tracer como um serviço singleton
+// Isso permite injetar o Tracer no MyController
 builder.Services.AddSingleton<Tracer>(sp => 
     sp.GetRequiredService<TracerProvider>().GetTracer("MyController"));
 
@@ -42,6 +61,9 @@ if (app.Environment.IsDevelopment())
 
 app.UseRouting();
 
+// Adiciona o middleware de tracing
+app.UseMiddleware<TracingMiddleware>();
+
 app.UseAuthorization();
 
 app.MapControllers();
@@ -56,26 +78,21 @@ void InitializeDatabase()
 
     var command = connection.CreateCommand();
     command.CommandText = @"
-        CREATE TABLE IF NOT EXISTS MyTable (
+        DROP TABLE IF EXISTS MyTable;
+        CREATE TABLE MyTable (
             Id INTEGER PRIMARY KEY AUTOINCREMENT,
-            Name TEXT NOT NULL
+            Name TEXT NOT NULL,
+            CreditCard TEXT NOT NULL
         );
     ";
     command.ExecuteNonQuery();
 
-    // Check if the table already contains data
-    command.CommandText = "SELECT COUNT(*) FROM MyTable";
-    var count = (long)command.ExecuteScalar();
-
-    if (count == 0)
-    {
-        // Insert 10 initial records
-        for (int i = 1; i <= 3; i++)
-        {
-            command.CommandText = $@"
-                INSERT INTO MyTable (Name) VALUES ('Initial Data {i}');
-            ";
-            command.ExecuteNonQuery();
-        }
-    }
+    // Insere dados de teste com cartões de crédito
+    command.CommandText = @"
+        INSERT INTO MyTable (Name, CreditCard) VALUES 
+        ('João Silva', '4532-1234-5678-9012'),
+        ('Maria Santos', '5412-8765-4321-9876'),
+        ('Pedro Oliveira', '4111-1111-1111-1111');
+    ";
+    command.ExecuteNonQuery();
 }
