@@ -1,0 +1,31 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  transform/mask_credit_cards:
+    trace_statements:
+      - context: span
+        statements:
+          - replace_pattern(attributes["http.response.body"], "(\\d{4})-(\\d{4})-(\\d{4})-", "xxxx-xxx-xxxx-")
+   
+
+exporters:
+  # Exporter para debug (logs)
+  logging:
+    verbosity: detailed
+
+  # Exporter para o Jaeger via OTLP
+  otlp:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [transform/mask_credit_cards]
+      exporters: [logging, otlp] 

@@ -19,11 +19,8 @@ namespace app_otl.Controllers
         [HttpGet]
         public async Task<IActionResult> Get()
         {
-            using var span = _tracer.StartActiveSpan("GetEndpoint");
-
             using var connection = new SqliteConnection("Data Source=mydatabase.db");
             var result = await connection.QueryAsync("SELECT * FROM MyTable");
-
             return Ok(result);
         }
     }

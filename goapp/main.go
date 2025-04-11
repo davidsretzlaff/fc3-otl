@@ -21,9 +21,9 @@ var tracer trace.Tracer
 func main() {
 	// Inicializa o OpenTelemetry
 	ot := opentel.NewOpenTel()
-	ot.ServiceName = "GoApp"            // Nome do serviço que aparecerá no Jaeger
-	ot.ServiceVersion = "0.1"           // Versão do serviço
-	ot.ExporterEndpoint = "jaeger:4318" // Endpoint do Jaeger para enviar os traces
+	ot.ServiceName = "GoApp"                  // Nome do serviço que aparecerá no Jaeger
+	ot.ServiceVersion = "0.1"                 // Versão do serviço
+	ot.ExporterEndpoint = "otlcollector:4318" // Endpoint do OTL Collector
 
 	// Obtém o tracer configurado
 	tracer = ot.GetTracer()

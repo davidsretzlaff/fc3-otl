@@ -1,7 +1,7 @@
 using Microsoft.Data.Sqlite;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
-using app_otl.Middleware;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,38 +13,32 @@ builder.Services.AddOpenTelemetry()
     .WithTracing(tracerProviderBuilder =>
     {
         tracerProviderBuilder
-            // Configura o recurso (informações sobre o serviço)
             .SetResourceBuilder(ResourceBuilder.CreateDefault()
-                .AddService("DotNetService"))  // Nome do serviço que aparecerá no Jaeger
+                .AddService("DotNetService")
+                .AddTelemetrySdk())
             
-            // Adiciona instrumentação automática para ASP.NET Core
-            // Isso cria spans automaticamente para requisições HTTP
-            .AddAspNetCoreInstrumentation()
+            // Configura a instrumentação do ASP.NET Core
+            .AddAspNetCoreInstrumentation(options =>
+            {
+                options.RecordException = true;
+                options.Filter = (httpContext) =>
+                {
+                    // Captura todas as requisições
+                    return true;
+                };
+            })
             
-            // Adiciona instrumentação para chamadas HTTP (HttpClient)
-            // Isso cria spans para chamadas HTTP que seu serviço faz
             .AddHttpClientInstrumentation()
-            
-            // Adiciona instrumentação para SQL
-            // Isso cria spans para operações no banco de dados
             .AddSqlClientInstrumentation()
-            
-            // Adiciona o source "MyController" para criar spans manuais
-            // Isso permite criar spans personalizados no MyController
             .AddSource("MyController")
             
-            // Configura o exportador OTLP para enviar traces ao Jaeger
             .AddOtlpExporter(options =>
             {
-                // Endpoint do Jaeger para enviar os traces
-                options.Endpoint = new Uri("http://jaeger:4318/v1/traces");
-                // Protocolo HTTP com Protobuf
+                options.Endpoint = new Uri("http://otlcollector:4318/v1/traces");
                 options.Protocol = OpenTelemetry.Exporter.OtlpExportProtocol.HttpProtobuf;
             });
     });
 
-// Registra o Tracer como um serviço singleton
-// Isso permite injetar o Tracer no MyController
 builder.Services.AddSingleton<Tracer>(sp => 
     sp.GetRequiredService<TracerProvider>().GetTracer("MyController"));
 
@@ -61,8 +55,42 @@ if (app.Environment.IsDevelopment())
 
 app.UseRouting();
 
-// Adiciona o middleware de tracing
-app.UseMiddleware<TracingMiddleware>();
+// Middleware para capturar request/response
+app.Use(async (context, next) =>
+{
+    var activity = System.Diagnostics.Activity.Current;
+    if (activity != null)
+    {
+        // Captura o body da requisição
+        if (context.Request.Body != null)
+        {
+            context.Request.EnableBuffering();
+            var requestBody = await new StreamReader(context.Request.Body).ReadToEndAsync();
+            context.Request.Body.Position = 0;
+            activity.SetTag("http.request.body", requestBody);
+            activity.SetTag("http.request.path", context.Request.Path);
+            activity.SetTag("http.method", context.Request.Method);
+        }
+
+        // Captura o body da resposta
+        var originalBodyStream = context.Response.Body;
+        using var responseBody = new MemoryStream();
+        context.Response.Body = responseBody;
+
+        await next();
+
+        responseBody.Position = 0;
+        var responseBodyText = await new StreamReader(responseBody).ReadToEndAsync();
+        responseBody.Position = 0;
+        await responseBody.CopyToAsync(originalBodyStream);
+        activity.SetTag("http.response.body", responseBodyText);
+        activity.SetTag("http.status_code", context.Response.StatusCode);
+    }
+    else
+    {
+        await next();
+    }
+});
 
 app.UseAuthorization();
 
