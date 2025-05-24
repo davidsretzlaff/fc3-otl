@@ -44,14 +44,5 @@ services:
       - "8080:80"
     environment:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otlcollector:4318
-      - ASPNETCORE_ENVIRONMENT=Development
-      - Logging__LogLevel__Default=Information
-      - Logging__LogLevel__Microsoft=Warning
-    volumes:
-      - ./logs:/app/logs
     depends_on:
       - otlcollector
-
-volumes:
-  logs:
-    driver: local

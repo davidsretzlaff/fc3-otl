@@ -2,8 +2,23 @@ using Microsoft.Data.Sqlite;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using System.Text;
+using Serilog;
+using Serilog.Events;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configuração do Serilog
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+    .WriteTo.File("logs/app.log", rollingInterval: RollingInterval.Day)
+    .CreateLogger();
+
+builder.Host.UseSerilog();
 
 // Add services to the container.
 builder.Services.AddControllers();
@@ -29,8 +44,7 @@ builder.Services.AddOpenTelemetry()
             })
             
             .AddHttpClientInstrumentation()
-            .AddSqlClientInstrumentation()
-            .AddSource("MyController")
+            .AddSource("UserController")
             
             .AddOtlpExporter(options =>
             {
@@ -40,7 +54,7 @@ builder.Services.AddOpenTelemetry()
     });
 
 builder.Services.AddSingleton<Tracer>(sp => 
-    sp.GetRequiredService<TracerProvider>().GetTracer("MyController"));
+    sp.GetRequiredService<TracerProvider>().GetTracer("UserController"));
 
 var app = builder.Build();
 
