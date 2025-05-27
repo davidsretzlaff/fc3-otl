@@ -40,21 +40,18 @@ services:
       otlcollector:
         condition: service_started
 
-##  payments.customer:
-##    build:
-##      context: ./Payments.Customer
-##      dockerfile: Dockerfile
-##    ports:
-##      - "8080:80"
-##    environment:
-##      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otlcollector:4318
-##      - ASPNETCORE_ENVIRONMENT=Development
-##      - Logging__LogLevel__Default=Information
-##      - Logging__LogLevel__Microsoft=Warning
-##    volumes:
-##      - ./logs:/app/logs
-##    depends_on:
-##      - otlcollector
+  payments.customer:
+    build:
+      context: ./Payments.Customer
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      - otlcollector
 
   mysql:
     image: mysql:8.0

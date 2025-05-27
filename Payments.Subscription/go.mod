@@ -1,4 +1,4 @@
-module payments-customer
+module payments-subscription
 
 go 1.23.0
 

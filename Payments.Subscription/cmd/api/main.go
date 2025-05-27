@@ -4,10 +4,11 @@ import (
 	"log"
 	"net/http"
 
-	"payments-customer/config"
-	opentel "payments-customer/internal/common/telemetry"
-	"payments-customer/internal/subscription"
-	mysql "payments-customer/internal/subscription/mysql"
+	"payments-subscription/config"
+	opentel "payments-subscription/internal/common/telemetry"
+	"payments-subscription/internal/customer"
+	"payments-subscription/internal/subscription"
+	mysql "payments-subscription/internal/subscription/mysql"
 
 	"github.com/gorilla/mux"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux"
@@ -41,8 +42,11 @@ func main() {
 	subscriptionEventPublisher := subscription.NewInMemoryEventPublisher()
 	subscriptionEventService := subscription.NewSubscriptionEventService(subscriptionEventPublisher)
 
+	// Cria o cliente do serviço de Customer
+	customerClient := customer.NewCustomerClient(cfg.CustomerServiceURL)
+
 	// Cria o serviço base
-	subscriptionService := subscription.NewSubscriptionService(repositoryDecored, subscriptionEventService)
+	subscriptionService := subscription.NewSubscriptionService(repositoryDecored, subscriptionEventService, customerClient)
 
 	// Aplica o decorador de tracing
 	subscriptionServiceDecored := subscription.NewSubscriptionServiceTracingDecorator(subscriptionService, tracer)

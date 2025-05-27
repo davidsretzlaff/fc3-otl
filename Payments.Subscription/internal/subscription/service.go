@@ -3,20 +3,27 @@ package subscription
 import (
 	"context"
 	"fmt"
-	"log"
+
+	"payments-subscription/internal/customer"
 )
 
 // SubscriptionService representa o serviço de aplicação para Subscription
 type SubscriptionService struct {
-	repository   SubscriptionRepository
-	eventService *SubscriptionEventService
+	repository     SubscriptionRepository
+	eventService   *SubscriptionEventService
+	customerClient *customer.CustomerClient
 }
 
 // NewSubscriptionService cria uma nova instância do SubscriptionService
-func NewSubscriptionService(repository SubscriptionRepository, eventService *SubscriptionEventService) *SubscriptionService {
+func NewSubscriptionService(
+	repository SubscriptionRepository,
+	eventService *SubscriptionEventService,
+	customerClient *customer.CustomerClient,
+) *SubscriptionService {
 	return &SubscriptionService{
-		repository:   repository,
-		eventService: eventService,
+		repository:     repository,
+		eventService:   eventService,
+		customerClient: customerClient,
 	}
 }
 
@@ -55,7 +62,19 @@ type SubscriptionServiceInterface interface {
 func (s *SubscriptionService) CreateSubscription(ctx context.Context, req CreateSubscriptionRequest) (*SubscriptionResponse, error) {
 	correlationID := fmt.Sprintf("sub-%d", ctx.Value("request_id"))
 
-	subscription, err := NewSubscription(req.PlanID, req.Customer.CustomerID, correlationID)
+	// Criar o customer primeiro
+	customerReq := customer.CustomerRequest{
+		Name:  req.Customer.Name,
+		Email: req.Customer.Email,
+	}
+
+	customerResp, err := s.customerClient.CreateCustomer(ctx, customerReq)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao criar customer: %w", err)
+	}
+
+	// Criar a subscription usando o ID do customer retornado
+	subscription, err := NewSubscription(req.PlanID, customerResp.ID, correlationID)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao criar subscription: %w", err)
 	}
@@ -64,9 +83,9 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 		return nil, fmt.Errorf("erro ao salvar subscription: %w", err)
 	}
 
-	if err := s.eventService.PublishSubscriptionEvents(ctx, subscription); err != nil {
+	/*if err := s.eventService.PublishSubscriptionEvents(ctx, subscription); err != nil {
 		log.Printf("Erro ao publicar eventos: %v", err)
-	}
+	}*/
 
 	return s.toSubscriptionResponse(subscription), nil
 }

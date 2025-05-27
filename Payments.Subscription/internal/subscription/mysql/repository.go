@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"payments-customer/internal/subscription"
+	"payments-subscription/internal/subscription"
 	"time"
 )
 

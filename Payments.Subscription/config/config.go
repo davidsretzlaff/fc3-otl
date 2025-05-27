@@ -10,66 +10,45 @@ import (
 
 // Config representa as configurações da aplicação
 type Config struct {
-	Database  DatabaseConfig
-	Server    ServerConfig
-	Telemetry TelemetryConfig
-}
-
-// DatabaseConfig configurações do banco de dados
-type DatabaseConfig struct {
-	Host     string
-	Port     string
-	User     string
-	Password string
-	Database string
-}
-
-// ServerConfig configurações do servidor
-type ServerConfig struct {
-	Port string
-}
-
-// TelemetryConfig configurações de telemetria
-type TelemetryConfig struct {
-	ServiceName      string
-	ServiceVersion   string
-	ExporterEndpoint string
+	Server struct {
+		Port string
+	}
+	Database struct {
+		Host     string
+		Port     string
+		User     string
+		Password string
+		Name     string
+	}
+	Telemetry struct {
+		ServiceName    string
+		ServiceVersion string
+	}
+	CustomerServiceURL string
 }
 
 // LoadConfig carrega as configurações da aplicação
 func LoadConfig() *Config {
-	return &Config{
-		/*Database: DatabaseConfig{
-			Host:     "localhost",
-			Port:     "3306",
-			User:     "payments",
-			Password: "payments123",
-			Database: "payments_subscription",
-		},
-		Server: ServerConfig{
-			Port: "8888",
-		},
-		Telemetry: TelemetryConfig{
-			ServiceName:      "payments-subscription",
-			ServiceVersion:   "1.0.0",
-			ExporterEndpoint: "otlcollector:4318",
-		},*/
-		Database: DatabaseConfig{
-			Host:     getEnv("DB_HOST", "localhost"),
-			Port:     getEnv("DB_PORT", "3306"),
-			User:     getEnv("DB_USER", "payments"),
-			Password: getEnv("DB_PASSWORD", "payments123"),
-			Database: getEnv("DB_NAME", "payments_subscription"),
-		},
-		Server: ServerConfig{
-			Port: getEnv("SERVER_PORT", "8888"),
-		},
-		Telemetry: TelemetryConfig{
-			ServiceName:      getEnv("OTEL_SERVICE_NAME", "payments-subscription"),
-			ServiceVersion:   getEnv("OTEL_SERVICE_VERSION", "1.0.0"),
-			ExporterEndpoint: getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "otlcollector:4318"),
-		},
-	}
+	cfg := &Config{}
+
+	// Configurações do servidor
+	cfg.Server.Port = getEnvOrDefault("SERVER_PORT", "8081")
+
+	// Configurações do banco de dados
+	cfg.Database.Host = getEnvOrDefault("DB_HOST", "localhost")
+	cfg.Database.Port = getEnvOrDefault("DB_PORT", "3306")
+	cfg.Database.User = getEnvOrDefault("DB_USER", "root")
+	cfg.Database.Password = getEnvOrDefault("DB_PASSWORD", "root")
+	cfg.Database.Name = getEnvOrDefault("DB_NAME", "subscription")
+
+	// Configurações de telemetria
+	cfg.Telemetry.ServiceName = getEnvOrDefault("TELEMETRY_SERVICE_NAME", "subscription-service")
+	cfg.Telemetry.ServiceVersion = getEnvOrDefault("TELEMETRY_SERVICE_VERSION", "1.0.0")
+
+	// URL do serviço de Customer
+	cfg.CustomerServiceURL = getEnvOrDefault("CUSTOMER_SERVICE_URL", "http://payments.customer/api/customer")
+
+	return cfg
 }
 
 // NewDatabaseConnection cria uma nova conexão com o banco de dados
@@ -79,7 +58,7 @@ func (c *Config) NewDatabaseConnection() (*sql.DB, error) {
 		c.Database.Password,
 		c.Database.Host,
 		c.Database.Port,
-		c.Database.Database,
+		c.Database.Name,
 	)
 
 	db, err := sql.Open("mysql", dsn)
@@ -95,7 +74,7 @@ func (c *Config) NewDatabaseConnection() (*sql.DB, error) {
 }
 
 // getEnv obtém uma variável de ambiente ou retorna um valor padrão
-func getEnv(key, defaultValue string) string {
+func getEnvOrDefault(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
 	}
