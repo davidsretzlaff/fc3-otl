@@ -2,17 +2,26 @@ package subscription
 
 import (
 	"context"
+	"encoding/json"
+	"log"
+	"time"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
-// SubscriptionServiceTracingDecorator é um decorator que adiciona tracing ao serviço
+const (
+	warningThreshold = 2 * time.Second
+	errorThreshold   = 5 * time.Second
+)
+
+// SubscriptionServiceTracingDecorator é um decorator que adiciona tracing e logging ao serviço
 type SubscriptionServiceTracingDecorator struct {
 	service SubscriptionServiceInterface
 	tracer  trace.Tracer
 }
 
-// NewSubscriptionServiceTracingDecorator cria uma nova instância do decorator de tracing
+// NewSubscriptionServiceTracingDecorator cria uma nova instância do decorator
 func NewSubscriptionServiceTracingDecorator(service SubscriptionServiceInterface, tracer trace.Tracer) SubscriptionServiceInterface {
 	return &SubscriptionServiceTracingDecorator{
 		service: service,
@@ -20,34 +29,119 @@ func NewSubscriptionServiceTracingDecorator(service SubscriptionServiceInterface
 	}
 }
 
-// CreateSubscription adiciona tracing à operação de criação
+// addRequestToSpan adiciona dados da request ao span
+func (d *SubscriptionServiceTracingDecorator) addRequestToSpan(span trace.Span, req interface{}) {
+	if reqJSON, err := json.Marshal(req); err == nil {
+		span.SetAttributes(attribute.String("request", string(reqJSON)))
+	}
+}
+
+// addResponseToSpan adiciona dados da response ao span
+func (d *SubscriptionServiceTracingDecorator) addResponseToSpan(span trace.Span, resp interface{}, err error) {
+	if err != nil {
+		span.SetAttributes(attribute.String("error", err.Error()))
+		return
+	}
+
+	if respJSON, err := json.Marshal(resp); err == nil {
+		span.SetAttributes(attribute.String("response", string(respJSON)))
+	}
+}
+
+// logExecutionTime loga o tempo de execução e erros
+func (d *SubscriptionServiceTracingDecorator) logExecutionTime(methodName string, start time.Time, err error) {
+	duration := time.Since(start)
+
+	// Log de erro se houver
+	if err != nil {
+		log.Printf("[ERROR] Method %s failed: %v (duration: %v)", methodName, err, duration)
+		return
+	}
+
+	// Log baseado no tempo de execução
+	switch {
+	case duration >= errorThreshold:
+		log.Printf("[ERROR] Method %s took too long to execute: %v (threshold: %v)", methodName, duration, errorThreshold)
+	case duration >= warningThreshold:
+		log.Printf("[WARN] Method %s is running slow: %v (threshold: %v)", methodName, duration, warningThreshold)
+	}
+}
+
+// CreateSubscription adiciona tracing e logging à operação de criação
 func (d *SubscriptionServiceTracingDecorator) CreateSubscription(ctx context.Context, req CreateSubscriptionRequest) (*SubscriptionResponse, error) {
-	ctx, span := d.tracer.Start(ctx, "SubscriptionService.CreateSubscription")
+	start := time.Now()
+	ctx, span := d.tracer.Start(ctx, "Service.CreateSubscription")
 	defer span.End()
 
-	return d.service.CreateSubscription(ctx, req)
+	// Adiciona request ao span
+	d.addRequestToSpan(span, req)
+
+	response, err := d.service.CreateSubscription(ctx, req)
+
+	// Adiciona response ou erro ao span
+	d.addResponseToSpan(span, response, err)
+
+	d.logExecutionTime("CreateSubscription", start, err)
+	return response, err
 }
 
-// GetSubscriptionByID adiciona tracing à operação de busca por ID
+// GetSubscriptionByID adiciona tracing e logging à operação de busca por ID
 func (d *SubscriptionServiceTracingDecorator) GetSubscriptionByID(ctx context.Context, id string) (*SubscriptionResponse, error) {
-	ctx, span := d.tracer.Start(ctx, "SubscriptionService.GetSubscriptionByID")
+	start := time.Now()
+	ctx, span := d.tracer.Start(ctx, "Service.GetSubscriptionByID")
 	defer span.End()
 
-	return d.service.GetSubscriptionByID(ctx, id)
+	// Adiciona request ao span
+	span.SetAttributes(attribute.String("subscription_id", id))
+
+	response, err := d.service.GetSubscriptionByID(ctx, id)
+
+	// Adiciona response ou erro ao span
+	d.addResponseToSpan(span, response, err)
+
+	d.logExecutionTime("GetSubscriptionByID", start, err)
+	return response, err
 }
 
-// GetAllSubscriptions adiciona tracing à operação de busca de todas as subscriptions
+// GetAllSubscriptions adiciona tracing e logging à operação de busca de todas as subscriptions
 func (d *SubscriptionServiceTracingDecorator) GetAllSubscriptions(ctx context.Context) ([]*SubscriptionResponse, error) {
-	ctx, span := d.tracer.Start(ctx, "SubscriptionService.GetAllSubscriptions")
+	start := time.Now()
+	ctx, span := d.tracer.Start(ctx, "Service.GetAllSubscriptions")
 	defer span.End()
 
-	return d.service.GetAllSubscriptions(ctx)
+	response, err := d.service.GetAllSubscriptions(ctx)
+
+	// Adiciona response ou erro ao span
+	d.addResponseToSpan(span, response, err)
+
+	// Adiciona contagem de resultados se não houver erro
+	if err == nil {
+		span.SetAttributes(attribute.Int("response.count", len(response)))
+	}
+
+	d.logExecutionTime("GetAllSubscriptions", start, err)
+	return response, err
 }
 
-// ActivateSubscription adiciona tracing à operação de ativação
+// ActivateSubscription adiciona tracing e logging à operação de ativação
 func (d *SubscriptionServiceTracingDecorator) ActivateSubscription(ctx context.Context, id, correlationID string) error {
-	ctx, span := d.tracer.Start(ctx, "SubscriptionService.ActivateSubscription")
+	start := time.Now()
+	ctx, span := d.tracer.Start(ctx, "Service.ActivateSubscription")
 	defer span.End()
 
-	return d.service.ActivateSubscription(ctx, id, correlationID)
+	// Adiciona dados da request ao span
+	span.SetAttributes(
+		attribute.String("subscription_id", id),
+		attribute.String("correlation_id", correlationID),
+	)
+
+	err := d.service.ActivateSubscription(ctx, id, correlationID)
+
+	// Adiciona erro ao span se houver
+	if err != nil {
+		span.SetAttributes(attribute.String("error", err.Error()))
+	}
+
+	d.logExecutionTime("ActivateSubscription", start, err)
+	return err
 }
