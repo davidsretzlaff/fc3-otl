@@ -1,38 +1,34 @@
-# Estágio de build
-FROM golang:1.22-alpine AS builder
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
+WORKDIR /app
+EXPOSE 80
 
-# Define o diretório de trabalho dentro do container
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+ARG BUILD_CONFIGURATION=Release
+
+WORKDIR /src
+
+# Copy project file to the correct folder inside container
+COPY ./src/Customer.API/Api.csproj ./Customer.API/
+
+# Restore dependencies
+RUN dotnet restore "./Customer.API/Api.csproj"
+
+# Copy the entire source code
+COPY ./src/. ./src/
+
+WORKDIR /src/Customer.API
+
+# Build the project
+RUN dotnet build "Api.csproj" -c $BUILD_CONFIGURATION -o /app/build
+
+FROM build AS publish
+ARG BUILD_CONFIGURATION=Release
+
+RUN dotnet publish "Api.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+
+FROM base AS final
 WORKDIR /app
 
-# Copia os arquivos go.mod e go.sum primeiro (melhor prática para cache de camadas)
-COPY go.mod go.sum ./
+COPY --from=publish /app/publish .
 
-# Baixa as dependências do projeto
-RUN go mod download
-
-# Copia todo o código fonte
-COPY . .
-
-# Compila a aplicação
-# CGO_ENABLED=0: Desativa o CGO para criar um binário estático
-# -o goapp: Nome do binário de saída
-RUN CGO_ENABLED=0 GOOS=linux go build -o goapp
-
-# Estágio final (imagem menor)
-FROM alpine:latest
-
-# Instala o ca-certificates (necessário para HTTPS)
-RUN apk --no-cache add ca-certificates
-
-# Define o diretório de trabalho
-WORKDIR /app
-
-# Copia o binário compilado do estágio anterior
-COPY --from=builder /app/goapp .
-
-# Expõe a porta que a aplicação usa
-EXPOSE 8888
-
-# Comando que será executado quando o container iniciar
-CMD ["./goapp"]
-
+ENTRYPOINT ["dotnet", "Customer.API.dll"]

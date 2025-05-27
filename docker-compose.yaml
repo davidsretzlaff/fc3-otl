@@ -1,3 +1,5 @@
+version: "3.8"
+
 services:
 
   jaeger:
@@ -5,8 +7,8 @@ services:
     container_name: jaeger
     restart: always
     ports:
-      - "16686:16686"  # Jaeger UI
-      - "14250:14250"  # gRPC endpoint
+      - "16686:16686"
+      - "14250:14250"
     environment:
       - COLLECTOR_OTLP_ENABLED=true
       - COLLECTOR_ZIPKIN_HTTP_PORT=0
@@ -20,38 +22,62 @@ services:
       dockerfile: Dockerfile
     container_name: otlcollector
     ports:
-      - "4318:4318"  # OTLP HTTP endpoint
+      - "4318:4318"
     depends_on:
       - jaeger
 
-  goapp:
+  payments.subscription:
     build:
-      context: ./goapp
+      context: ./Payments.Subscription
       dockerfile: Dockerfile
     ports:
       - "8888:8888"
-    environment:
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otlcollector:4318
+    env_file:
+      - .env
     depends_on:
-      - otlcollector
-      - netcoreapp
+      mysql:
+        condition: service_healthy
+      otlcollector:
+        condition: service_started
 
-  netcoreapp:
-    build:
-      context: ./netcoreapp/app-otl
-      dockerfile: Dockerfile
-    ports:
-      - "8080:80"
+##  payments.customer:
+##    build:
+##      context: ./Payments.Customer
+##      dockerfile: Dockerfile
+##    ports:
+##      - "8080:80"
+##    environment:
+##      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otlcollector:4318
+##      - ASPNETCORE_ENVIRONMENT=Development
+##      - Logging__LogLevel__Default=Information
+##      - Logging__LogLevel__Microsoft=Warning
+##    volumes:
+##      - ./logs:/app/logs
+##    depends_on:
+##      - otlcollector
+
+  mysql:
+    image: mysql:8.0
+    container_name: payments-subscription-mysql
     environment:
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otlcollector:4318
-      - ASPNETCORE_ENVIRONMENT=Development
-      - Logging__LogLevel__Default=Information
-      - Logging__LogLevel__Microsoft=Warning
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: payments_subscription
+      MYSQL_USER: payments
+      MYSQL_PASSWORD: payments123
+    ports:
+      - "3306:3306"
     volumes:
-      - ./logs:/app/logs
-    depends_on:
-      - otlcollector
+      - mysql_data:/var/lib/mysql
+      - ./Payments.Subscription/migrations:/docker-entrypoint-initdb.d
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+        test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+        interval: 10s
+        timeout: 5s
+        retries: 5
 
 volumes:
   logs:
+    driver: local
+  mysql_data:
     driver: local

@@ -1,48 +1,109 @@
-# My Project
 
-## Overview
+# Setup
 
-This project is a .NET Core web application that utilizes OpenTelemetry for distributed tracing. The application captures HTTP request and response data, including sensitive information, and sends it to an OTL Collector for processing. The traces can be visualized using Jaeger.
+1. Copy `.env.example` to `.env`
 
-## Features
-
-- **Automatic Instrumentation**: The application uses OpenTelemetry to automatically instrument HTTP requests and responses.
-- **Data Capture**: Captures the body of requests and responses, along with HTTP method, path, and status code.
-- **Sensitive Data Handling**: Configured to remove sensitive fields from traces before sending them to the collector.
-- **Database Integration**: Uses SQLite for data storage and initialization.
-
-## Getting Started
-
-### Prerequisites
-
-- [.NET SDK](https://dotnet.microsoft.com/download) (version 6.0 or later)
-- [Docker](https://www.docker.com/get-started) (for running the OTL Collector and Jaeger)
-
-### Installation
-
-1. Clone the repository:
    ```bash
-   git clone <repository-url>
-   cd <project-directory>
-   ```
+   cp .env.example .env
 
-2. Build the applications and OTL Collector:
-   ```bash
-   docker-compose up --build
-   ```
 
-3. Access the application at `http://localhost:8888`.
+# Event-Driven Subscription System
 
-5. Access Jaeger at `http://localhost:16686` to visualize traces.
+This project showcases a microservices architecture built with domain events, OpenTelemetry-based observability, and a clean separation of responsibilities across services. It demonstrates realistic, loosely coupled service coordination with a focus on customer onboarding, subscription activation, and charge processing—all without a frontend.
 
-## Configuration
+## 🎯 Project Goals
 
-The OTL Collector is configured to receive traces from the application and export them to Jaeger. The configuration file can be found in the `otlcollector/config.yaml`.
+- **Domain event modeling**: Demonstrate how to structure events that represent important business changes
+- **Microservice communication via events**: Implement asynchronous and decoupled communication
+- **Distributed observability**: Include tracing, logs, correlation IDs, and latency warnings
+- **Realistic workflows**: Customer is created only when needed
 
-## Contributing
+## 🏗️ Microservices
 
-Contributions are welcome! Please open an issue or submit a pull request for any improvements or bug fixes.
+- **Customer Service** – Manages customer creation and lookup
+- **Subscription Service** – Handles subscription lifecycle
+- **Charge Service** – Manages billing/charging logic
 
-## License
+## 📡 Key Domain Events
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+- `SubscriptionRequested`
+- `CustomerCreated`
+- `CustomerVerified`
+- `SubscriptionReadyForActivation`
+- `ChargeSucceeded`
+- `ChargeFailed`
+- `SlowOperationWarning` (observability event)
+
+## 🔄 Workflow Overview
+
+### Step-by-step Domain Flow:
+
+#### 1. User initiates subscription
+- **Trigger**: `POST /subscriptions`
+- **Service**: Subscription Service
+- **Emits**: `SubscriptionRequested`
+
+#### 2. Customer Service responds
+- **Listens to**: `SubscriptionRequested`
+- **Checks**: If customer exists (by email)
+- **If not exists**: Creates customer
+- **Emits**: `CustomerVerified` or `CustomerCreated`
+
+#### 3. Subscription completes setup
+- **Listens to**: `CustomerCreated` / `CustomerVerified`
+- **Links**: Customer to subscription
+- **Emits**: `SubscriptionReadyForActivation`
+
+#### 4. Charge Service bills the user
+- **Listens to**: `SubscriptionReadyForActivation`
+- **Emits**: `ChargeSucceeded` or `ChargeFailed`
+
+#### 5. Observability events
+- Each service adds spans and logs
+- If any operation exceeds threshold, emits: `SlowOperationWarning`
+
+## 👁️ Observability Features
+
+- **OpenTelemetry Collector** for centralized tracing and logging
+- **Jaeger or Tempo** for trace visualization
+- **Loki or Elastic** for structured JSON logs
+- **Correlation IDs** passed through events and requests
+- **Latency tracking** using spans
+- **Custom warnings** for slow flows (`SlowOperationWarning`)
+
+## 🛠️ Tech Stack Suggestion
+
+| Component | Technology |
+|-----------|------------|
+| **Message Broker** | Kafka, NATS, or RabbitMQ |
+| **Tracing** | OpenTelemetry SDK + Collector |
+| **Logging** | JSON logs + FluentBit/Loki |
+| **Visualization** | Grafana (for traces, logs, metrics) |
+| **Runtime** | Node.js, Go, or Java |
+| **Containerization** | Docker + Docker Compose |
+
+## 🧪 How to Use / Test
+
+Use Postman or curl to trigger:
+
+```bash
+curl -X POST http://localhost:8081/subscriptions \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com", "plan": "basic"}'
+```
+
+### Steps to observe:
+
+1. **Observe** events flowing through the services
+2. **Use Jaeger** to view full trace with correlation ID
+3. **Review** structured logs and check for any `SlowOperationWarning` events
+
+## 🚀 Future Improvements
+
+- [ ] Add retry & dead-letter queue for failed events
+- [ ] Add scheduled billing cycles
+- [ ] Implement Saga/Process manager for full orchestration (optional)
+
+---
+
+**Built with focus on event-driven architecture and distributed observability** 🎯
