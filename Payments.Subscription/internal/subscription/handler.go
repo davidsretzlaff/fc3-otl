@@ -5,27 +5,22 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // handler gerencia as requisições HTTP para Subscription
 type handler struct {
-	service *SubscriptionService
-	tracer  trace.Tracer
+	service SubscriptionServiceInterface
 }
 
 // NewSubscriptionHandler cria uma nova instância do SubscriptionHandler
-func NewSubscriptionHandler(service *SubscriptionService, tracer trace.Tracer) *handler {
+func NewSubscriptionHandler(service SubscriptionServiceInterface) *handler {
 	return &handler{
 		service: service,
-		tracer:  tracer,
 	}
 }
 
 // CreateSubscription handler para criar uma subscription
 func (h *handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
-	ctx, span := h.tracer.Start(r.Context(), "SubscriptionHandler.CreateSubscription")
-	defer span.End()
 
 	var req CreateSubscriptionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -33,7 +28,7 @@ func (h *handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	subscription, err := h.service.CreateSubscription(ctx, req)
+	subscription, err := h.service.CreateSubscription(r.Context(), req)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -46,8 +41,6 @@ func (h *handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 
 // GetSubscriptionByID handler para buscar uma subscription pelo ID
 func (h *handler) GetSubscriptionByID(w http.ResponseWriter, r *http.Request) {
-	ctx, span := h.tracer.Start(r.Context(), "SubscriptionHandler.GetSubscriptionByID")
-	defer span.End()
 
 	vars := mux.Vars(r)
 	id := vars["id"]
@@ -57,7 +50,7 @@ func (h *handler) GetSubscriptionByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	subscription, err := h.service.GetSubscriptionByID(ctx, id)
+	subscription, err := h.service.GetSubscriptionByID(r.Context(), id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -69,10 +62,8 @@ func (h *handler) GetSubscriptionByID(w http.ResponseWriter, r *http.Request) {
 
 // GetAllSubscriptions handler para buscar todas as subscriptions
 func (h *handler) GetAllSubscriptions(w http.ResponseWriter, r *http.Request) {
-	ctx, span := h.tracer.Start(r.Context(), "SubscriptionHandler.GetAllSubscriptions")
-	defer span.End()
 
-	subscriptions, err := h.service.GetAllSubscriptions(ctx)
+	subscriptions, err := h.service.GetAllSubscriptions(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

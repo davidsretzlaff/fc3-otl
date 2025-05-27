@@ -33,11 +33,21 @@ func main() {
 	defer db.Close()
 
 	// Inicializa as dependências seguindo DDD
-	subscriptionRepository := mysql.NewMySQLSubscriptionRepository(db, tracer)
-	subscriptionEventPublisher := subscription.NewInMemoryEventPublisher(tracer)
-	subscriptionEventService := subscription.NewSubscriptionEventService(subscriptionEventPublisher, tracer)
-	subscriptionService := subscription.NewSubscriptionService(subscriptionRepository, subscriptionEventService, tracer)
-	subscriptionHandler := subscription.NewSubscriptionHandler(subscriptionService, tracer)
+	repository := mysql.NewMySQLSubscriptionRepository(db)
+
+	// Aplica o decorator de tracing ao repositório
+	repositoryDecored := subscription.NewSubscriptionRepositoryTracingDecorator(repository, tracer)
+
+	subscriptionEventPublisher := subscription.NewInMemoryEventPublisher()
+	subscriptionEventService := subscription.NewSubscriptionEventService(subscriptionEventPublisher)
+
+	// Cria o serviço base
+	subscriptionService := subscription.NewSubscriptionService(repositoryDecored, subscriptionEventService)
+
+	// Aplica o decorador de tracing
+	subscriptionServiceDecored := subscription.NewSubscriptionServiceTracingDecorator(subscriptionService, tracer)
+
+	subscriptionHandler := subscription.NewSubscriptionHandler(subscriptionServiceDecored)
 
 	// Configura o router HTTP com middleware de tracing
 	router := mux.NewRouter()

@@ -6,28 +6,22 @@ import (
 	"fmt"
 	"payments-customer/internal/subscription"
 	"time"
-
-	"go.opentelemetry.io/otel/trace"
 )
 
 // MySQLSubscriptionRepository implementa o SubscriptionRepository usando MySQL
 type MySQLSubscriptionRepository struct {
-	db     *sql.DB
-	tracer trace.Tracer
+	db *sql.DB
 }
 
 // NewMySQLSubscriptionRepository cria uma nova instância do repositório MySQL
-func NewMySQLSubscriptionRepository(db *sql.DB, tracer trace.Tracer) *MySQLSubscriptionRepository {
+func NewMySQLSubscriptionRepository(db *sql.DB) *MySQLSubscriptionRepository {
 	return &MySQLSubscriptionRepository{
-		db:     db,
-		tracer: tracer,
+		db: db,
 	}
 }
 
 // Create cria uma nova subscription no banco de dados
 func (r *MySQLSubscriptionRepository) Create(ctx context.Context, sub *subscription.Subscription) error {
-	ctx, span := r.tracer.Start(ctx, "MySQLSubscriptionRepository.Create")
-	defer span.End()
 
 	query := `
 		INSERT INTO subscriptions (id, plan_id, customer_id, status, created_at, updated_at)
@@ -52,9 +46,6 @@ func (r *MySQLSubscriptionRepository) Create(ctx context.Context, sub *subscript
 
 // GetByID busca uma subscription pelo ID no banco de dados
 func (r *MySQLSubscriptionRepository) GetByID(ctx context.Context, id subscription.SubscriptionID) (*subscription.Subscription, error) {
-	ctx, span := r.tracer.Start(ctx, "MySQLSubscriptionRepository.GetByID")
-	defer span.End()
-
 	query := `
 		SELECT id, plan_id, customer_id, status, created_at, updated_at
 		FROM subscriptions
@@ -91,8 +82,6 @@ func (r *MySQLSubscriptionRepository) GetByID(ctx context.Context, id subscripti
 
 // GetByCustomerID busca subscriptions pelo customer ID no banco de dados
 func (r *MySQLSubscriptionRepository) GetByCustomerID(ctx context.Context, customerID subscription.CustomerID) ([]*subscription.Subscription, error) {
-	ctx, span := r.tracer.Start(ctx, "MySQLSubscriptionRepository.GetByCustomerID")
-	defer span.End()
 
 	query := `
 		SELECT id, plan_id, customer_id, status, created_at, updated_at
@@ -142,8 +131,6 @@ func (r *MySQLSubscriptionRepository) GetByCustomerID(ctx context.Context, custo
 
 // Update atualiza uma subscription existente no banco de dados
 func (r *MySQLSubscriptionRepository) Update(ctx context.Context, sub *subscription.Subscription) error {
-	ctx, span := r.tracer.Start(ctx, "MySQLSubscriptionRepository.Update")
-	defer span.End()
 
 	query := `
 		UPDATE subscriptions 
@@ -177,8 +164,6 @@ func (r *MySQLSubscriptionRepository) Update(ctx context.Context, sub *subscript
 
 // GetAll busca todas as subscriptions no banco de dados
 func (r *MySQLSubscriptionRepository) GetAll(ctx context.Context) ([]*subscription.Subscription, error) {
-	ctx, span := r.tracer.Start(ctx, "MySQLSubscriptionRepository.GetAll")
-	defer span.End()
 
 	query := `
 		SELECT id, plan_id, customer_id, status, created_at, updated_at

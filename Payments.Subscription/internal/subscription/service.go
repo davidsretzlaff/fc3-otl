@@ -4,23 +4,19 @@ import (
 	"context"
 	"fmt"
 	"log"
-
-	"go.opentelemetry.io/otel/trace"
 )
 
 // SubscriptionService representa o serviço de aplicação para Subscription
 type SubscriptionService struct {
 	repository   SubscriptionRepository
 	eventService *SubscriptionEventService
-	tracer       trace.Tracer
 }
 
 // NewSubscriptionService cria uma nova instância do SubscriptionService
-func NewSubscriptionService(repository SubscriptionRepository, eventService *SubscriptionEventService, tracer trace.Tracer) *SubscriptionService {
+func NewSubscriptionService(repository SubscriptionRepository, eventService *SubscriptionEventService) *SubscriptionService {
 	return &SubscriptionService{
 		repository:   repository,
 		eventService: eventService,
-		tracer:       tracer,
 	}
 }
 
@@ -47,28 +43,28 @@ type SubscriptionResponse struct {
 	UpdatedAt  string `json:"updated_at"`
 }
 
+// SubscriptionServiceInterface é uma interface para o SubscriptionService
+type SubscriptionServiceInterface interface {
+	CreateSubscription(ctx context.Context, req CreateSubscriptionRequest) (*SubscriptionResponse, error)
+	GetSubscriptionByID(ctx context.Context, id string) (*SubscriptionResponse, error)
+	GetAllSubscriptions(ctx context.Context) ([]*SubscriptionResponse, error)
+	ActivateSubscription(ctx context.Context, id, correlationID string) error
+}
+
 // CreateSubscription cria uma nova subscription
 func (s *SubscriptionService) CreateSubscription(ctx context.Context, req CreateSubscriptionRequest) (*SubscriptionResponse, error) {
-	ctx, span := s.tracer.Start(ctx, "SubscriptionService.CreateSubscription")
-	defer span.End()
-
-	// Define correlation ID se não fornecido
 	correlationID := fmt.Sprintf("sub-%d", ctx.Value("request_id"))
 
-	// Cria a subscription
 	subscription, err := NewSubscription(req.PlanID, req.Customer.CustomerID, correlationID)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao criar subscription: %w", err)
 	}
 
-	// Salva no repositório
 	if err := s.repository.Create(ctx, subscription); err != nil {
 		return nil, fmt.Errorf("erro ao salvar subscription: %w", err)
 	}
 
-	// Publica os eventos de domínio
 	if err := s.eventService.PublishSubscriptionEvents(ctx, subscription); err != nil {
-		// Log do erro mas não falha a operação
 		log.Printf("Erro ao publicar eventos: %v", err)
 	}
 
@@ -77,9 +73,6 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req Create
 
 // GetSubscriptionByID busca uma subscription pelo ID
 func (s *SubscriptionService) GetSubscriptionByID(ctx context.Context, id string) (*SubscriptionResponse, error) {
-	ctx, span := s.tracer.Start(ctx, "SubscriptionService.GetSubscriptionByID")
-	defer span.End()
-
 	subscriptionID, err := NewSubscriptionIDFromString(id)
 	if err != nil {
 		return nil, fmt.Errorf("ID inválido: %w", err)
@@ -95,9 +88,6 @@ func (s *SubscriptionService) GetSubscriptionByID(ctx context.Context, id string
 
 // GetAllSubscriptions busca todas as subscriptions
 func (s *SubscriptionService) GetAllSubscriptions(ctx context.Context) ([]*SubscriptionResponse, error) {
-	ctx, span := s.tracer.Start(ctx, "SubscriptionService.GetAllSubscriptions")
-	defer span.End()
-
 	subscriptions, err := s.repository.GetAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao buscar subscriptions: %w", err)
@@ -113,9 +103,6 @@ func (s *SubscriptionService) GetAllSubscriptions(ctx context.Context) ([]*Subsc
 
 // ActivateSubscription ativa uma subscription
 func (s *SubscriptionService) ActivateSubscription(ctx context.Context, id, correlationID string) error {
-	ctx, span := s.tracer.Start(ctx, "SubscriptionService.ActivateSubscription")
-	defer span.End()
-
 	subscriptionID, err := NewSubscriptionIDFromString(id)
 	if err != nil {
 		return fmt.Errorf("ID inválido: %w", err)
