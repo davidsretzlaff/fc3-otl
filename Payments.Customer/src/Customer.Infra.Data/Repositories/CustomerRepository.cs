@@ -5,55 +5,54 @@ using Customer.Application.Interfaces;
 
 namespace Customer.Infra.Data.Repositories;
 
-public class UserRepository : IUserRepository
+public class CustomerRepository : ICustomerRepository
 {
     private readonly string _connectionString = "Data Source=mydatabase.db";
-    private readonly List<User> _users = new();
+    private readonly List<Domain.Domain.Customer> _customers = new();
 
-    public async Task Add(User user)
+    public async Task Add(Domain.Domain.Customer user)
     {
-        _users.Add(user);
+        _customers.Add(user);
     }
 
-    public async Task CreateUser(User user, CancellationToken cancellationToken)
+    public async Task CreateCustomer(Domain.Domain.Customer user, CancellationToken cancellationToken)
     {
         using var connection = new SqliteConnection(_connectionString);
         await connection.OpenAsync(cancellationToken);
         
         var sql = @"
-            INSERT INTO Users (Id, Name, Login, Password)
-            VALUES (@Id, @Name, @Login, @Password)";
+            INSERT INTO Customer (Id, Name, Email)
+            VALUES (@Id, @Name, @Email)";
 
         await connection.ExecuteAsync(sql, new
         {
             Id = user.Id.ToString(),
             Name = user.Name,
-            Login = user.Login,
-            Password = user.Password
+            Email = user.Email
         });
     }
 
-    public async Task<User> GetUserById(Guid id, CancellationToken cancellationToken)
+    public async Task<Domain.Domain.Customer> GetUserById(Guid id, CancellationToken cancellationToken)
     {
         using var connection = new SqliteConnection(_connectionString);
         await connection.OpenAsync(cancellationToken);
         
-        var sql = "SELECT Id, Name, Login, Password FROM Users WHERE Id = @Id";
+        var sql = "SELECT Id, Name, Email FROM Customer WHERE Id = @Id";
         var result = await connection.QueryFirstOrDefaultAsync(sql, new { Id = id.ToString() });
         
         if (result == null)
             return null;
             
-        return User.Create(result.Name, result.Login, result.Password);
+        return Domain.Domain.Customer.Create(result.Name, result.eMAIL);
     }
 
     public async Task Save()
     {
         // Para cada usuário na lista temporária, salvar no banco
-        foreach (var user in _users)
+        foreach (var customer in _customers)
         {
-            await CreateUser(user, CancellationToken.None);
+            await CreateCustomer(customer, CancellationToken.None);
         }
-        _users.Clear();
+        _customers.Clear();
     }
 } 

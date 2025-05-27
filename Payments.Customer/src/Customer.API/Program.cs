@@ -23,11 +23,11 @@ builder.Services.AddControllers();
 
 // Registrar MediatR
 builder.Services.AddMediatR(cfg => {
-    cfg.RegisterServicesFromAssembly(typeof(CreateUserInput).Assembly);
+    cfg.RegisterServicesFromAssembly(typeof(CreateCustomerInput).Assembly);
 });
 
 // Registrar repositórios e dependências
-builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
 
 // Configuração do OpenTelemetry
 builder.Services.AddOpenTelemetry()
@@ -59,8 +59,7 @@ builder.Services.AddOpenTelemetry()
             });
     });
 
-builder.Services.AddSingleton<Tracer>(sp => 
-    sp.GetRequiredService<TracerProvider>().GetTracer("UserController"));
+builder.Services.AddSingleton<Tracer>(sp =>  sp.GetRequiredService<TracerProvider>().GetTracer("CustomerController"));
 
 var app = builder.Build();
 
@@ -126,11 +125,10 @@ void InitializeDatabase()
 
     var command = connection.CreateCommand();
     command.CommandText = @"
-        CREATE TABLE IF NOT EXISTS Users (
+        CREATE TABLE IF NOT EXISTS Customer (
             Id TEXT PRIMARY KEY,
             Name TEXT NOT NULL,
-            Login TEXT NOT NULL,
-            Password TEXT NOT NULL
+            Email TEXT NOT NULL
         );
     ";
     command.ExecuteNonQuery();

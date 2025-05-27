@@ -4,7 +4,7 @@ using MediatR;
 
 namespace Customer.Application.UseCases.Customer.CreateUser
 {
-    public interface ICreateUser : IRequestHandler<CreateUserInput, UserOutput>
+    public interface ICreateCustomer : IRequestHandler<CreateCustomerInput, CustomerOutput>
     {
     }
 }

@@ -2,14 +2,14 @@ using DomainEntity = Customer.Domain.Domain;
 
 namespace Customer.Application.UseCases.User.Common;
 
-public record UserOutput 
+public record CustomerOutput 
 {
     public string Id {get; init;}
     public string Name {get; init;}
 
-    public static UserOutput From(DomainEntity.User user) 
+    public static CustomerOutput From(DomainEntity.Customer user) 
     {
-        return new UserOutput()
+        return new CustomerOutput()
         {
             Id = user.Id.ToString(),
             Name = user.Name

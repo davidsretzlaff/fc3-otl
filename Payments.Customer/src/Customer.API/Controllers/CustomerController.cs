@@ -10,14 +10,14 @@ using OpenTelemetry.Trace;
 namespace app_otl.Controllers
 {
     [ApiController]
-    [Route("api/users")]  
-    public class UserController : ControllerBase
+    [Route("api/customer")]  
+    public class CustomerController : ControllerBase
     {
         private readonly Tracer _tracer;
-        private readonly ILogger<UserController> _logger;
+        private readonly ILogger<CustomerController> _logger;
         private readonly IMediator _mediator;
 
-        public UserController(Tracer tracer, ILogger<UserController> logger, IMediator mediator)
+        public CustomerController(Tracer tracer, ILogger<CustomerController> logger, IMediator mediator)
         {
             _tracer = tracer;
             _logger = logger;
@@ -25,16 +25,16 @@ namespace app_otl.Controllers
         }
 
         [HttpPost]
-        [ProducesResponseType(typeof(ApiResponse<UserOutput>), StatusCodes.Status201Created)]
+        [ProducesResponseType(typeof(ApiResponse<CustomerOutput>), StatusCodes.Status201Created)]
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
-        public async Task<IActionResult> Create([FromBody] CreateUserInput input, CancellationToken cancellationToken)
+        public async Task<IActionResult> Create([FromBody] CreateCustomerInput input, CancellationToken cancellationToken)
         {
             var output = await _mediator.Send(input, cancellationToken);
             return CreatedAtAction(
                nameof(Create),
                new { output.Id },
-               new ApiResponse<UserOutput>(output)
+               new ApiResponse<CustomerOutput>(output)
             );
         }
 
