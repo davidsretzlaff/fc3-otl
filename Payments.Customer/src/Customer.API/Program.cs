@@ -13,7 +13,8 @@ var builder = WebApplication.CreateBuilder(args);
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
-    .WriteTo.File("logs/app.log", rollingInterval: RollingInterval.Day)
+    .WriteTo.Console()
+    .WriteTo.File("/app/logs/app.log", rollingInterval: RollingInterval.Day)
     .CreateLogger();
 
 builder.Host.UseSerilog();
@@ -35,7 +36,7 @@ builder.Services.AddOpenTelemetry()
     {
         tracerProviderBuilder
             .SetResourceBuilder(ResourceBuilder.CreateDefault()
-                .AddService("DotNetService")
+                .AddService("customer-service")
                 .AddTelemetrySdk())
             
             // Configura a instrumentação do ASP.NET Core
@@ -50,7 +51,7 @@ builder.Services.AddOpenTelemetry()
             })
             
             .AddHttpClientInstrumentation()
-            .AddSource("UserController")
+            .AddSource("customer-service")
             
             .AddOtlpExporter(options =>
             {
@@ -59,7 +60,7 @@ builder.Services.AddOpenTelemetry()
             });
     });
 
-builder.Services.AddSingleton<Tracer>(sp =>  sp.GetRequiredService<TracerProvider>().GetTracer("CustomerController"));
+builder.Services.AddSingleton<Tracer>(sp =>  sp.GetRequiredService<TracerProvider>().GetTracer("customer-service"));
 
 var app = builder.Build();
 
@@ -80,6 +81,19 @@ app.Use(async (context, next) =>
     var activity = System.Diagnostics.Activity.Current;
     if (activity != null)
     {
+        // Log dos headers de tracing
+        var traceparent = context.Request.Headers["traceparent"].ToString();
+        var tracestate = context.Request.Headers["tracestate"].ToString();
+        
+        Log.Information("Trace Headers - TraceParent: {TraceParent}, TraceState: {TraceState}", 
+            traceparent, 
+            tracestate);
+        
+        Log.Information("Activity Info - TraceId: {TraceId}, SpanId: {SpanId}, ParentSpanId: {ParentSpanId}",
+            activity.TraceId,
+            activity.SpanId,
+            activity.ParentSpanId);
+
         // Captura o body da requisição
         if (context.Request.Body != null)
         {
