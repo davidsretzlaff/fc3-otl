@@ -6,6 +6,7 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Serilog;
 using Serilog.Events;
+using Serilog.Sinks.OpenTelemetry;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,7 +15,13 @@ Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
     .WriteTo.Console()
-    .WriteTo.File("/app/logs/app.log", rollingInterval: RollingInterval.Day)
+    .WriteTo.File("/app/logs/customer.log", rollingInterval: RollingInterval.Day)
+    .WriteTo.OpenTelemetry(options =>
+    {
+        options.Endpoint = "http://otlcollector:4318/v1/logs";
+        options.Protocol = OtlpProtocol.HttpProtobuf;
+    })
+    .Enrich.WithProperty("Application", "Customer.API")
     .CreateLogger();
 
 builder.Host.UseSerilog();
