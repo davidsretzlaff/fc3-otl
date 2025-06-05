@@ -1,27 +1,35 @@
 using Customer.Application.Interfaces;
 using Customer.Application.UseCases.User.CreateUser;
 using Customer.Infra.Data.Repositories; 
+using Customer.API.Middleware;
 using Microsoft.Data.Sqlite;
-using OpenTelemetry.Resources;
-using OpenTelemetry.Trace;
 using Serilog;
 using Serilog.Events;
-using Serilog.Sinks.OpenTelemetry;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configuração do Serilog
+// ===== CONFIGURAÇÃO LIMPA DO SERILOG =====
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
-    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
-    .WriteTo.Console()
-    .WriteTo.File("/app/logs/customer.log", rollingInterval: RollingInterval.Day)
-    .WriteTo.OpenTelemetry(options =>
-    {
-        options.Endpoint = "http://otlcollector:4318/v1/logs";
-        options.Protocol = OtlpProtocol.HttpProtobuf;
-    })
-    .Enrich.WithProperty("Application", "Customer.API")
+    
+    // BLOQUEAR COMPLETAMENTE logs do framework/sistema
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Fatal)
+    .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Fatal)
+    .MinimumLevel.Override("Microsoft.Extensions", LogEventLevel.Fatal)
+    .MinimumLevel.Override("Microsoft.Hosting", LogEventLevel.Fatal)
+    .MinimumLevel.Override("System", LogEventLevel.Fatal)
+    .MinimumLevel.Override("Microsoft.Data", LogEventLevel.Fatal)
+    .MinimumLevel.Override("Dapper", LogEventLevel.Fatal)
+    
+    // PERMITIR apenas logs do nosso domínio
+    .MinimumLevel.Override("Customer.API", LogEventLevel.Information)
+    .MinimumLevel.Override("Customer.Application", LogEventLevel.Information)
+    .MinimumLevel.Override("Customer.Domain", LogEventLevel.Information)
+    
+    // Formato SIMPLES e LIMPO - só timestamp, serviço e mensagem
+    .WriteTo.Console(outputTemplate: 
+        "{Timestamp:HH:mm:ss} [customer] {Message:lj}{NewLine}{Exception}")
+    
     .CreateLogger();
 
 builder.Host.UseSerilog();
@@ -37,38 +45,6 @@ builder.Services.AddMediatR(cfg => {
 // Registrar repositórios e dependências
 builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
 
-// Configuração do OpenTelemetry
-builder.Services.AddOpenTelemetry()
-    .WithTracing(tracerProviderBuilder =>
-    {
-        tracerProviderBuilder
-            .SetResourceBuilder(ResourceBuilder.CreateDefault()
-                .AddService("customer-service")
-                .AddTelemetrySdk())
-            
-            // Configura a instrumentação do ASP.NET Core
-            .AddAspNetCoreInstrumentation(options =>
-            {
-                options.RecordException = true;
-                options.Filter = (httpContext) =>
-                {
-                    // Captura todas as requisições
-                    return true;
-                };
-            })
-            
-            .AddHttpClientInstrumentation()
-            .AddSource("customer-service")
-            
-            .AddOtlpExporter(options =>
-            {
-                options.Endpoint = new Uri("http://otlcollector:4318/v1/traces");
-                options.Protocol = OpenTelemetry.Exporter.OtlpExportProtocol.HttpProtobuf;
-            });
-    });
-
-builder.Services.AddSingleton<Tracer>(sp =>  sp.GetRequiredService<TracerProvider>().GetTracer("customer-service"));
-
 var app = builder.Build();
 
 // Initialize SQLite database
@@ -82,95 +58,40 @@ if (app.Environment.IsDevelopment())
 
 app.UseRouting();
 
-// Middleware para capturar request/response
-app.Use(async (context, next) =>
-{
-    var activity = System.Diagnostics.Activity.Current;
-    if (activity != null)
-    {
-        // Log dos headers de tracing
-        var traceparent = context.Request.Headers["traceparent"].ToString();
-        var tracestate = context.Request.Headers["tracestate"].ToString();
-        
-        Log.Information("Trace Headers - TraceParent: {TraceParent}, TraceState: {TraceState}", 
-            traceparent, 
-            tracestate);
-        
-        Log.Information("Activity Info - TraceId: {TraceId}, SpanId: {SpanId}, ParentSpanId: {ParentSpanId}",
-            activity.TraceId,
-            activity.SpanId,
-            activity.ParentSpanId);
-
-        // Captura o body da requisição
-        if (context.Request.Body != null)
-        {
-            context.Request.EnableBuffering();
-            var requestBody = await new StreamReader(context.Request.Body).ReadToEndAsync();
-            context.Request.Body.Position = 0;
-            activity.SetTag("http.request.body", requestBody);
-            activity.SetTag("http.request.path", context.Request.Path);
-            activity.SetTag("http.method", context.Request.Method);
-        }
-
-        // Captura o body da resposta
-        var originalBodyStream = context.Response.Body;
-        using var responseBody = new MemoryStream();
-        context.Response.Body = responseBody;
-
-        await next();
-
-        responseBody.Position = 0;
-        var responseBodyText = await new StreamReader(responseBody).ReadToEndAsync();
-        responseBody.Position = 0;
-        await responseBody.CopyToAsync(originalBodyStream);
-        activity.SetTag("http.response.body", responseBodyText);
-        activity.SetTag("http.status_code", context.Response.StatusCode);
-    }
-    else
-    {
-        await next();
-    }
-});
+// MIDDLEWARE LIMPO - apenas correlation ID sem logs redundantes
+app.UseCorrelationId();
 
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapGet("/", () => "Hello World!");
 
+// Health check SILENCIOSO
+app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+
+app.MapGet("/", () => "Customer Service is running!");
+
+// INICIALIZAÇÃO SILENCIOSA
 app.Run("http://0.0.0.0:80");
 
 void InitializeDatabase()
 {
-    using var connection = new SqliteConnection("Data Source=mydatabase.db");
+    var connectionString = "Data Source=/app/data/customer.db";
+    Directory.CreateDirectory("/app/data");
+    
+    using var connection = new SqliteConnection(connectionString);
     connection.Open();
-
-    var command = connection.CreateCommand();
-    command.CommandText = @"
-        CREATE TABLE IF NOT EXISTS Customer (
+    
+    var createTableCommand = connection.CreateCommand();
+    createTableCommand.CommandText = @"
+        CREATE TABLE IF NOT EXISTS Customers (
             Id TEXT PRIMARY KEY,
             Name TEXT NOT NULL,
-            Email TEXT NOT NULL
-        );
-    ";
-    command.ExecuteNonQuery();
-    connection.Close();
-    /*command = connection.CreateCommand();
-    command.CommandText = @"
-        DROP TABLE IF EXISTS MyTable;
-        CREATE TABLE MyTable (
-            Id INTEGER PRIMARY KEY AUTOINCREMENT,
-            Name TEXT NOT NULL,
-            CreditCard TEXT NOT NULL
-        );
-    ";
-    command.ExecuteNonQuery();
-
-    // Insere dados de teste com cartões de crédito
-    command.CommandText = @"
-        INSERT INTO MyTable (Name, CreditCard) VALUES 
-        ('João Silva', '4532-1234-5678-9012'),
-        ('Maria Santos', '5412-8765-4321-9876'),
-        ('Pedro Oliveira', '4111-1111-1111-1111');
-    ";
-    command.ExecuteNonQuery();*/
+            Email TEXT NOT NULL UNIQUE,
+            CreatedAt TEXT NOT NULL,
+            UpdatedAt TEXT NOT NULL
+        )";
+    createTableCommand.ExecuteNonQuery();
+    
+    // Log APENAS se necessário
+    Log.Information("Database initialized successfully");
 }

@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
+
+	"payments-subscription/internal/common/logging"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -18,6 +21,7 @@ type CustomerClient struct {
 	httpClient *http.Client
 	propagator propagation.TextMapPropagator
 	tracer     trace.Tracer
+	logger     *logging.StructuredLogger
 }
 
 type CustomerRequest struct {
@@ -37,16 +41,31 @@ func NewCustomerClient(baseURL string) *CustomerClient {
 		httpClient: &http.Client{},
 		propagator: otel.GetTextMapPropagator(),
 		tracer:     otel.GetTracerProvider().Tracer("customer-client"),
+		logger:     logging.NewStructuredLogger("subscription-service"),
 	}
 }
 
 func (c *CustomerClient) CreateCustomer(ctx context.Context, request CustomerRequest) (*CustomerResponse, error) {
-	ctx, span := c.tracer.Start(ctx, "CustomerClient.CreateCustomer")
+	startTime := time.Now()
+	operation := "CustomerClient.CreateCustomer"
+
+	// Garantir que existe correlation ID
+	ctx = logging.EnsureCorrelationID(ctx, "subscription")
+	correlationID := logging.GetCorrelationID(ctx)
+
+	// Log início da operação
+	c.logger.OperationStart(ctx, operation, map[string]interface{}{
+		"customer_email": request.Email,
+		"customer_name":  request.Name,
+	})
+
+	ctx, span := c.tracer.Start(ctx, operation)
 	defer span.End()
 
 	span.SetAttributes(
 		attribute.String("customer.name", request.Name),
 		attribute.String("customer.email", request.Email),
+		attribute.String("correlation.id", correlationID),
 	)
 
 	url := c.baseURL
@@ -54,29 +73,41 @@ func (c *CustomerClient) CreateCustomer(ctx context.Context, request CustomerReq
 	jsonData, err := json.Marshal(request)
 	if err != nil {
 		span.RecordError(err)
+		c.logger.Error(ctx, operation, "Failed to serialize request", err, nil)
 		return nil, fmt.Errorf("erro ao serializar request: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		span.RecordError(err)
+		c.logger.Error(ctx, operation, "Failed to create HTTP request", err, nil)
 		return nil, fmt.Errorf("erro ao criar request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Correlation-ID", correlationID)
 
-	// Propaga o contexto de tracing
+	// Propagar contexto de tracing via headers W3C
 	c.propagator.Inject(ctx, propagation.HeaderCarrier(req.Header))
 
 	resp, err := c.httpClient.Do(req)
+
+	statusCode := 0
+	if resp != nil {
+		statusCode = resp.StatusCode
+		defer resp.Body.Close()
+	}
+
 	if err != nil {
+		c.logger.LogServiceCall(ctx, "Customer", statusCode, err)
 		span.RecordError(err)
 		return nil, fmt.Errorf("erro ao fazer request: %w", err)
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-		err := fmt.Errorf("erro do servidor: status code %d", resp.StatusCode)
+	// Log para status codes de erro
+	if statusCode != http.StatusCreated && statusCode != http.StatusOK {
+		err := fmt.Errorf("customer service returned status code %d", statusCode)
+		c.logger.LogServiceCall(ctx, "Customer", statusCode, nil)
 		span.RecordError(err)
 		return nil, err
 	}
@@ -84,12 +115,18 @@ func (c *CustomerClient) CreateCustomer(ctx context.Context, request CustomerReq
 	var customerResponse CustomerResponse
 	if err := json.NewDecoder(resp.Body).Decode(&customerResponse); err != nil {
 		span.RecordError(err)
+		c.logger.Error(ctx, operation, "Failed to decode response", err, nil)
 		return nil, fmt.Errorf("erro ao decodificar resposta: %w", err)
 	}
 
 	span.SetAttributes(
 		attribute.String("customer.id", customerResponse.ID),
 	)
+
+	// Log fim apenas se demorou muito
+	c.logger.OperationEnd(ctx, operation, startTime, map[string]interface{}{
+		"customer_id": customerResponse.ID,
+	})
 
 	return &customerResponse, nil
 }

@@ -1,0 +1,47 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "🔍 Logs Investigation",
+    "tags": ["logs"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "📋 All Recent Logs",
+        "type": "logs",
+        "datasource": {
+          "type": "loki"
+        },
+        "targets": [
+          {
+            "expr": "{job=\"containers\"}",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {
+          "h": 12,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "options": {
+          "showTime": true,
+          "showLabels": true,
+          "showCommonLabels": false,
+          "wrapLogMessage": false,
+          "prettifyLogMessage": false,
+          "enableLogDetails": true,
+          "dedupStrategy": "none",
+          "sortOrder": "Descending"
+        }
+      }
+    ],
+    "time": {
+      "from": "now-30m",
+      "to": "now"
+    },
+    "refresh": "5s",
+    "version": 1,
+    "schemaVersion": 30
+  }
+} 

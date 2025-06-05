@@ -73,9 +73,37 @@ func (h *handler) GetAllSubscriptions(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(subscriptions)
 }
 
+// ActivateSubscription handler para ativar uma subscription
+func (h *handler) ActivateSubscription(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	if id == "" {
+		http.Error(w, "ID é obrigatório", http.StatusBadRequest)
+		return
+	}
+
+	// Tenta extrair correlation ID do header (opcional)
+	correlationID := r.Header.Get("X-Correlation-ID")
+
+	err := h.service.ActivateSubscription(r.Context(), id, correlationID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Subscription activated successfully",
+		"id":      id,
+	})
+}
+
 // RegisterRoutes registra as rotas da subscription
 func (h *handler) RegisterRoutes(router *mux.Router) {
 	router.HandleFunc("/subscriptions", h.CreateSubscription).Methods("POST")
 	router.HandleFunc("/subscriptions", h.GetAllSubscriptions).Methods("GET")
 	router.HandleFunc("/subscriptions/{id}", h.GetSubscriptionByID).Methods("GET")
+	router.HandleFunc("/subscriptions/{id}/activate", h.ActivateSubscription).Methods("POST")
 }
