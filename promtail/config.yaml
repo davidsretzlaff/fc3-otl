@@ -9,137 +9,35 @@ clients:
   - url: http://loki:3100/loki/api/v1/push
 
 scrape_configs:
-  # =====================================================
-  # LOGS DE APLICAÇÃO - Docker Output (stdout/stderr)
-  # =====================================================
-  - job_name: docker-apps
+  - job_name: app-logs
     docker_sd_configs:
       - host: unix:///var/run/docker.sock
         refresh_interval: 5s
+
     relabel_configs:
-      # Pegar apenas containers de aplicação (payments.*)
+      # Keep only containers with subscription or customer in the name
       - source_labels: [__meta_docker_container_name]
         regex: '.*payments\.(subscription|customer).*'
-        target_label: __tmp_keep
-        replacement: 'keep'
-      # Manter apenas containers de aplicação
-      - source_labels: [__tmp_keep]
-        regex: 'keep'
         action: keep
-      # Extrair nome do serviço do container
+
+      # Extract service label (subscription or customer) from container name
       - source_labels: [__meta_docker_container_name]
-        regex: '.*payments\.(.*).*'
+        regex: '.*/fc3-otl-payments\.(customer|subscription)-.*'
         target_label: service
-      # Label para categoria
+        replacement: '$1'
+
+      # Add static category label
       - target_label: category
         replacement: app
-      # Label para job
+
+      # Add static job label
       - target_label: job
         replacement: app
-      # Nome do container
-      - source_labels: [__meta_docker_container_name]
-        target_label: container_name
+
     pipeline_stages:
-      # Extrair campos dos logs usando regex (formato atual)
+      # Extract app_service from logs like "[subscription]" or "[customer]"
       - regex:
-          expression: '.*\[(?P<app_service>subscription|customer)\].*\[CorrelationId:(?P<correlation_id>[^\]]+)\].*'
-          source: __line__
-      # Extrair level se houver ERROR, INFO, etc
-      - regex:
-          expression: '.*(ERROR|INFO|WARN|DEBUG).*'
-          source: __line__
-      # Adicionar labels extraídos
-      - labels:
-          app_service:
-          correlation_id:
-      # Output direto da linha original (já está formatada)
-      - output:
+          expression: '.*\[(?P<app_service>subscription|customer)\].*'
           source: __line__
 
-  # =====================================================
-  # LOGS DO DOCKER SYSTEM
-  # =====================================================
-  - job_name: docker-system
-    docker_sd_configs:
-      - host: unix:///var/run/docker.sock
-        refresh_interval: 5s
-    relabel_configs:
-      # Pegar apenas containers de sistema (mysql, prometheus, etc.)
-      - source_labels: [__meta_docker_container_name]
-        regex: '.*(mysql|prometheus|jaeger).*'
-        target_label: __tmp_keep
-        replacement: 'keep'
-      # Manter apenas containers de sistema
-      - source_labels: [__tmp_keep]
-        regex: 'keep'
-        action: keep
-      # Nome do serviço
-      - source_labels: [__meta_docker_container_name]
-        target_label: service
-      # Label para categoria
-      - target_label: category
-        replacement: system
-      # Label para job
-      - target_label: job
-        replacement: system
-    pipeline_stages:
-      # Simples output para logs de sistema
-      - output:
-          source: __line__
-
-  # =====================================================
-  # LOGS DO LOKI
-  # =====================================================
-  - job_name: docker-loki
-    docker_sd_configs:
-      - host: unix:///var/run/docker.sock
-        refresh_interval: 5s
-    relabel_configs:
-      # Pegar apenas container do Loki
-      - source_labels: [__meta_docker_container_name]
-        regex: '.*loki.*'
-        target_label: __tmp_keep
-        replacement: 'keep'
-      # Manter apenas container do Loki
-      - source_labels: [__tmp_keep]
-        regex: 'keep'
-        action: keep
-      # Nome do serviço
-      - source_labels: [__meta_docker_container_name]
-        target_label: service
-      # Label para categoria
-      - target_label: category
-        replacement: loki
-      # Label para job
-      - target_label: job
-        replacement: loki
-    pipeline_stages:
-      # Output simples para logs do Loki
-      - output:
-          source: __line__
-
-  # =====================================================
-  # LOGS GERAIS DE CONTAINERS (fallback)
-  # =====================================================
-  - job_name: docker-containers
-    docker_sd_configs:
-      - host: unix:///var/run/docker.sock
-        refresh_interval: 5s
-    relabel_configs:
-      # Excluir containers já processados acima
-      - source_labels: [__meta_docker_container_name]
-        regex: '.*(payments\.|mysql|prometheus|jaeger|loki).*'
-        action: drop
-      # Nome do serviço
-      - source_labels: [__meta_docker_container_name]
-        target_label: service
-      # Label para categoria
-      - target_label: category
-        replacement: container
-      # Label para job
-      - target_label: job
-        replacement: container
-    pipeline_stages:
-      # Output simples para outros containers
-      - output:
-          source: __line__ 
+      # Extract correlat
