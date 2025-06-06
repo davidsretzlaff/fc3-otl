@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Serilog.Context;
 
 namespace Customer.API.Middleware
 {
@@ -26,15 +27,19 @@ namespace Customer.API.Middleware
             context.Items["CorrelationId"] = correlationId;
             context.Response.Headers[CorrelationIdHeaderName] = correlationId;
 
-            // Adicionar ao Activity (OpenTelemetry)
-            var activity = Activity.Current;
-            if (activity != null)
+            // Adicionar ao contexto do Serilog para aparecer nos logs JSON
+            using (LogContext.PushProperty("correlation_id", correlationId))
             {
-                activity.SetTag("correlation.id", correlationId);
-            }
+                // Adicionar ao Activity (OpenTelemetry)
+                var activity = Activity.Current;
+                if (activity != null)
+                {
+                    activity.SetTag("correlation.id", correlationId);
+                }
 
-            // EXECUÇÃO SILENCIOSA - sem logs de requisição
-            await _next(context);
+                // EXECUÇÃO SILENCIOSA - sem logs de requisição
+                await _next(context);
+            }
         }
 
         private static string GenerateCorrelationId(string service)

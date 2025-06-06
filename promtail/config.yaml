@@ -15,29 +15,16 @@ scrape_configs:
         refresh_interval: 5s
 
     relabel_configs:
-      # Keep only containers with subscription or customer in the name
-      - source_labels: [__meta_docker_container_name]
-        regex: '.*payments\.(subscription|customer).*'
-        action: keep
-
-      # Extract service label (subscription or customer) from container name
-      - source_labels: [__meta_docker_container_name]
-        regex: '.*/fc3-otl-payments\.(customer|subscription)-.*'
-        target_label: service
-        replacement: '$1'
-
-      # Add static category label
-      - target_label: category
-        replacement: app
-
-      # Add static job label
       - target_label: job
         replacement: app
 
     pipeline_stages:
-      # Extract app_service from logs like "[subscription]" or "[customer]"
-      - regex:
-          expression: '.*\[(?P<app_service>subscription|customer)\].*'
-          source: __line__
-
-      # Extract correlat
+      - json:
+          expressions:
+            correlation_id: correlation_id
+            service: service
+            level: level
+      - labels:
+          correlation_id: correlation_id
+          service: service
+          level: level

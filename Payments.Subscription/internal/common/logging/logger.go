@@ -2,8 +2,9 @@ package logging
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"log"
+	"os"
 	"time"
 )
 
@@ -11,12 +12,21 @@ import (
 type LogLevel string
 
 const (
-	INFO  LogLevel = "INFO"
-	ERROR LogLevel = "ERROR"
-	WARN  LogLevel = "WARN"
+	INFO  LogLevel = "info"
+	ERROR LogLevel = "error"
+	WARN  LogLevel = "warn"
 )
 
-// StructuredLogger é um logger estruturado simples
+// LogEntry representa a estrutura do log JSON
+type LogEntry struct {
+	Time          string `json:"time"`
+	Level         string `json:"level"`
+	Message       string `json:"msg"`
+	CorrelationID string `json:"correlation_id"`
+	Service       string `json:"service"`
+}
+
+// StructuredLogger é um logger estruturado que gera JSON
 type StructuredLogger struct {
 	serviceName string
 }
@@ -28,29 +38,30 @@ func NewStructuredLogger(serviceName string) *StructuredLogger {
 	}
 }
 
-// formatMessage formata mensagem de log de forma limpa
-func (l *StructuredLogger) formatMessage(ctx context.Context, level LogLevel, message string) string {
-	timestamp := time.Now().UTC().Format("15:04:05")
-
-	// Extrair correlation ID do contexto se existir
-	if corrID := GetCorrelationID(ctx); corrID != "" {
-		if level == ERROR {
-			return fmt.Sprintf("%s [subscription] [CorrelationId:%s] ERROR: %s", timestamp, corrID, message)
-		}
-		return fmt.Sprintf("%s [subscription] [CorrelationId:%s] %s", timestamp, corrID, message)
+// logJSON registra uma entrada de log em formato JSON
+func (l *StructuredLogger) logJSON(ctx context.Context, level LogLevel, message string) {
+	entry := LogEntry{
+		Time:          time.Now().UTC().Format(time.RFC3339),
+		Level:         string(level),
+		Message:       message,
+		CorrelationID: GetCorrelationID(ctx),
+		Service:       l.serviceName,
 	}
 
-	// Log sem correlation ID
-	if level == ERROR {
-		return fmt.Sprintf("%s [subscription] ERROR: %s", timestamp, message)
+	jsonBytes, err := json.Marshal(entry)
+	if err != nil {
+		// Fallback para stderr se houver erro no JSON
+		fmt.Fprintf(os.Stderr, "ERROR: Failed to marshal log entry: %v\n", err)
+		return
 	}
-	return fmt.Sprintf("%s [subscription] %s", timestamp, message)
+
+	// Escrever JSON diretamente no stdout sem timestamp adicional
+	fmt.Println(string(jsonBytes))
 }
 
 // Info registra um log de nível INFO - APENAS ESSENCIAIS
 func (l *StructuredLogger) Info(ctx context.Context, operation, message string, contextData map[string]interface{}) {
-	formattedMessage := l.formatMessage(ctx, INFO, message)
-	log.Println(formattedMessage)
+	l.logJSON(ctx, INFO, message)
 }
 
 // Error registra um log de nível ERROR - APENAS ESSENCIAIS
@@ -60,8 +71,7 @@ func (l *StructuredLogger) Error(ctx context.Context, operation, message string,
 		errorMessage = fmt.Sprintf("%s: %s", message, err.Error())
 	}
 
-	formattedMessage := l.formatMessage(ctx, ERROR, errorMessage)
-	log.Println(formattedMessage)
+	l.logJSON(ctx, ERROR, errorMessage)
 }
 
 // OperationStart - LOG ESSENCIAL apenas para operações principais

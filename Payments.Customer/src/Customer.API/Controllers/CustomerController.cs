@@ -28,24 +28,22 @@ namespace app_otl.Controllers
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
         public async Task<IActionResult> Create([FromBody] CreateCustomerInput input, CancellationToken cancellationToken)
         {
-            var correlationId = HttpContext.GetCorrelationId();
-            
-            // LOG LIMPO - Apenas essencial
-            _logger.LogInformation("[CorrelationId:{CorrelationId}] Received create customer request", correlationId);
+            // LOG ESTRUTURADO - correlation_id será incluído automaticamente
+            _logger.LogInformation("Starting CreateCustomer for {CustomerEmail}", input.Email);
 
             try
             {
                 var output = await _mediator.Send(input, cancellationToken);
                 
-                // LOG LIMPO - Sucesso
-                _logger.LogInformation("[CorrelationId:{CorrelationId}] Customer created successfully", correlationId);
+                // LOG ESTRUTURADO - Sucesso
+                _logger.LogInformation("Customer created successfully with ID {CustomerId}", output.Id);
 
                 return CreatedAtAction(nameof(Create), new { output.Id }, new ApiResponse<CustomerOutput>(output));
             }
             catch (Exception ex)
             {
-                // LOG LIMPO - Erro sem stack trace
-                _logger.LogError("[CorrelationId:{CorrelationId}] ERROR: {ErrorMessage}", correlationId, ex.Message);
+                // LOG ESTRUTURADO - Erro
+                _logger.LogError(ex, "Failed to create customer for {CustomerEmail}", input.Email);
                 
                 return StatusCode(500, new ProblemDetails
                 {
@@ -73,7 +71,7 @@ namespace app_otl.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError("ERROR retrieving customers: {ErrorMessage}", ex.Message);
+                _logger.LogError(ex, "Failed to retrieve customers");
                 
                 return StatusCode(500, new ProblemDetails
                 {
@@ -113,7 +111,7 @@ namespace app_otl.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError("ERROR retrieving customer {CustomerId}: {ErrorMessage}", id, ex.Message);
+                _logger.LogError(ex, "Failed to retrieve customer {CustomerId}", id);
                 
                 return StatusCode(500, new ProblemDetails
                 {

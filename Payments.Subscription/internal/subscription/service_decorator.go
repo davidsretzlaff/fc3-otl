@@ -3,8 +3,10 @@ package subscription
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"fmt"
 	"time"
+
+	"payments-subscription/internal/common/logging"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -19,6 +21,7 @@ const (
 type SubscriptionServiceTracingDecorator struct {
 	service SubscriptionServiceInterface
 	tracer  trace.Tracer
+	logger  *logging.StructuredLogger
 }
 
 // NewSubscriptionServiceTracingDecorator cria uma nova instância do decorator
@@ -26,6 +29,7 @@ func NewSubscriptionServiceTracingDecorator(service SubscriptionServiceInterface
 	return &SubscriptionServiceTracingDecorator{
 		service: service,
 		tracer:  tracer,
+		logger:  logging.NewStructuredLogger("subscription-service"),
 	}
 }
 
@@ -48,22 +52,41 @@ func (d *SubscriptionServiceTracingDecorator) addResponseToSpan(span trace.Span,
 	}
 }
 
-// logExecutionTime loga o tempo de execução e erros
-func (d *SubscriptionServiceTracingDecorator) logExecutionTime(methodName string, start time.Time, err error) {
+// logExecutionTime loga o tempo de execução e erros usando logger estruturado
+func (d *SubscriptionServiceTracingDecorator) logExecutionTime(ctx context.Context, methodName string, start time.Time, err error) {
 	duration := time.Since(start)
 
 	// Log de erro se houver
 	if err != nil {
-		log.Printf("[ERROR] Method %s failed: %v (duration: %v)", methodName, err, duration)
+		d.logger.Error(ctx, "MethodExecution",
+			fmt.Sprintf("Method %s failed after %v", methodName, duration),
+			err,
+			map[string]interface{}{
+				"method":      methodName,
+				"duration_ms": duration.Milliseconds(),
+			})
 		return
 	}
 
 	// Log baseado no tempo de execução
 	switch {
 	case duration >= errorThreshold:
-		log.Printf("[ERROR] Method %s took too long to execute: %v (threshold: %v)", methodName, duration, errorThreshold)
+		d.logger.Error(ctx, "MethodPerformance",
+			fmt.Sprintf("Method %s took too long to execute: %v (threshold: %v)", methodName, duration, errorThreshold),
+			nil,
+			map[string]interface{}{
+				"method":       methodName,
+				"duration_ms":  duration.Milliseconds(),
+				"threshold_ms": errorThreshold.Milliseconds(),
+			})
 	case duration >= warningThreshold:
-		log.Printf("[WARN] Method %s is running slow: %v (threshold: %v)", methodName, duration, warningThreshold)
+		d.logger.Info(ctx, "MethodPerformance",
+			fmt.Sprintf("Method %s is running slow: %v (threshold: %v)", methodName, duration, warningThreshold),
+			map[string]interface{}{
+				"method":       methodName,
+				"duration_ms":  duration.Milliseconds(),
+				"threshold_ms": warningThreshold.Milliseconds(),
+			})
 	}
 }
 
@@ -81,7 +104,7 @@ func (d *SubscriptionServiceTracingDecorator) CreateSubscription(ctx context.Con
 	// Adiciona response ou erro ao span
 	d.addResponseToSpan(span, response, err)
 
-	d.logExecutionTime("CreateSubscription", start, err)
+	d.logExecutionTime(ctx, "CreateSubscription", start, err)
 	return response, err
 }
 
@@ -99,7 +122,7 @@ func (d *SubscriptionServiceTracingDecorator) GetSubscriptionByID(ctx context.Co
 	// Adiciona response ou erro ao span
 	d.addResponseToSpan(span, response, err)
 
-	d.logExecutionTime("GetSubscriptionByID", start, err)
+	d.logExecutionTime(ctx, "GetSubscriptionByID", start, err)
 	return response, err
 }
 
@@ -119,7 +142,7 @@ func (d *SubscriptionServiceTracingDecorator) GetAllSubscriptions(ctx context.Co
 		span.SetAttributes(attribute.Int("response.count", len(response)))
 	}
 
-	d.logExecutionTime("GetAllSubscriptions", start, err)
+	d.logExecutionTime(ctx, "GetAllSubscriptions", start, err)
 	return response, err
 }
 
@@ -142,6 +165,6 @@ func (d *SubscriptionServiceTracingDecorator) ActivateSubscription(ctx context.C
 		span.SetAttributes(attribute.String("error", err.Error()))
 	}
 
-	d.logExecutionTime("ActivateSubscription", start, err)
+	d.logExecutionTime(ctx, "ActivateSubscription", start, err)
 	return err
 }

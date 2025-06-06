@@ -5,10 +5,12 @@ using Customer.API.Middleware;
 using Microsoft.Data.Sqlite;
 using Serilog;
 using Serilog.Events;
+using Serilog.Formatting;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ===== CONFIGURAÇÃO LIMPA DO SERILOG =====
+// ===== CONFIGURAÇÃO JSON CUSTOMIZADA DO SERILOG =====
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     
@@ -26,9 +28,12 @@ Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Override("Customer.Application", LogEventLevel.Information)
     .MinimumLevel.Override("Customer.Domain", LogEventLevel.Information)
     
-    // Formato SIMPLES e LIMPO - só timestamp, serviço e mensagem
-    .WriteTo.Console(outputTemplate: 
-        "{Timestamp:HH:mm:ss} [customer] {Message:lj}{NewLine}{Exception}")
+    // ENRIQUECER logs com informações de contexto
+    .Enrich.FromLogContext()
+    .Enrich.WithProperty("service", "customer")
+    
+    // Formatter JSON customizado
+    .WriteTo.Console(new CustomJsonFormatter())
     
     .CreateLogger();
 
@@ -94,4 +99,27 @@ void InitializeDatabase()
     
     // Log APENAS se necessário
     Log.Information("Database initialized successfully");
+}
+
+// Formatter customizado para gerar JSON no formato desejado
+public class CustomJsonFormatter : ITextFormatter
+{
+    public void Format(LogEvent logEvent, TextWriter output)
+    {
+        var logObject = new
+        {
+            time = logEvent.Timestamp.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            level = logEvent.Level.ToString().ToLower(),
+            msg = logEvent.RenderMessage(),
+            correlation_id = logEvent.Properties.ContainsKey("correlation_id") 
+                ? logEvent.Properties["correlation_id"].ToString().Trim('"') 
+                : "",
+            service = logEvent.Properties.ContainsKey("service") 
+                ? logEvent.Properties["service"].ToString().Trim('"') 
+                : "customer"
+        };
+
+        var json = JsonSerializer.Serialize(logObject);
+        output.WriteLine(json);
+    }
 }

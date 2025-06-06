@@ -4,7 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+
+	"payments-subscription/internal/common/logging"
 )
 
 // EventPublisher define o contrato para publicação de eventos
@@ -14,11 +15,14 @@ type EventPublisher interface {
 
 // InMemoryEventPublisher implementa um publisher simples em memória para demonstração
 type InMemoryEventPublisher struct {
+	logger *logging.StructuredLogger
 }
 
 // NewInMemoryEventPublisher cria uma nova instância do publisher
 func NewInMemoryEventPublisher() *InMemoryEventPublisher {
-	return &InMemoryEventPublisher{}
+	return &InMemoryEventPublisher{
+		logger: logging.NewStructuredLogger("subscription-service"),
+	}
 }
 
 // Publish publica um evento (implementação simples para demonstração)
@@ -29,11 +33,13 @@ func (p *InMemoryEventPublisher) Publish(ctx context.Context, event DomainEvent)
 		return fmt.Errorf("erro ao serializar evento: %w", err)
 	}
 
-	// Log do evento (em um cenário real, seria enviado para um message broker)
-	log.Printf("Evento publicado: %s - %s - CorrelationID: %s",
-		event.EventType(),
-		string(eventData),
-		event.CorrelationID())
+	// Log do evento usando logger estruturado
+	p.logger.Info(ctx, "EventPublished",
+		fmt.Sprintf("Event published: %s", event.EventType()),
+		map[string]interface{}{
+			"event_type": event.EventType(),
+			"event_data": string(eventData),
+		})
 
 	return nil
 }

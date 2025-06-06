@@ -1,8 +1,9 @@
 package main
 
 import (
-	"log"
+	"context"
 	"net/http"
+	"os"
 
 	"payments-subscription/config"
 	"payments-subscription/internal/common/logging"
@@ -34,7 +35,9 @@ func main() {
 	// Conecta com o banco de dados
 	db, err := cfg.NewDatabaseConnection()
 	if err != nil {
-		log.Fatalf("Erro ao conectar com o banco: %v", err)
+		ctx := context.Background()
+		logger.Error(ctx, "DatabaseConnection", "Failed to connect to database", err, nil)
+		os.Exit(1)
 	}
 	defer db.Close()
 
@@ -88,12 +91,18 @@ func main() {
 		w.Write([]byte("OK"))
 	}).Methods("GET")
 
-	// Log de inicialização
-	log.Printf("Subscription Service iniciado na porta %s", cfg.Server.Port)
-	log.Printf("Customer Service URL: %s", cfg.CustomerServiceURL)
+	// Log de inicialização usando logger estruturado
+	ctx := context.Background()
+	logger.Info(ctx, "ServiceStartup", "Subscription Service started", map[string]interface{}{
+		"port":                 cfg.Server.Port,
+		"customer_service_url": cfg.CustomerServiceURL,
+	})
 
 	// Inicia o servidor
 	if err := http.ListenAndServe(":"+cfg.Server.Port, router); err != nil {
-		log.Fatalf("Erro ao iniciar o servidor: %v", err)
+		logger.Error(ctx, "ServerStartup", "Failed to start server", err, map[string]interface{}{
+			"port": cfg.Server.Port,
+		})
+		os.Exit(1)
 	}
 }
