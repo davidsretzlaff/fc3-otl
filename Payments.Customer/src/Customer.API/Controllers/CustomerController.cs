@@ -1,6 +1,7 @@
 ﻿using app_otl.ApiModels.Response;
 using Customer.Application.UseCases.User.Common;
 using Customer.Application.UseCases.User.CreateUser;
+using Customer.API.Controllers;
 using Customer.API.Middleware;
 using Dapper;
 using MediatR;
@@ -11,7 +12,7 @@ namespace app_otl.Controllers
 {
     [ApiController]
     [Route("api/customer")]  
-    public class CustomerController : ControllerBase
+    public class CustomerController : BaseController
     {
         private readonly ILogger<CustomerController> _logger;
         private readonly IMediator _mediator;
@@ -38,20 +39,14 @@ namespace app_otl.Controllers
                 // LOG ESTRUTURADO - Sucesso
                 _logger.LogInformation("Customer created successfully with ID {CustomerId}", output.Id);
 
-                return CreatedAtAction(nameof(Create), new { output.Id }, new ApiResponse<CustomerOutput>(output));
+                return SuccessResponse(output, 201, "Customer created successfully");
             }
             catch (Exception ex)
             {
                 // LOG ESTRUTURADO - Erro
                 _logger.LogError(ex, "Failed to create customer for {CustomerEmail}", input.Email);
                 
-                return StatusCode(500, new ProblemDetails
-                {
-                    Title = "Internal Server Error",
-                    Status = 500,
-                    Detail = "An error occurred while creating the customer",
-                    Instance = HttpContext.Request.Path
-                });
+                return InternalServerErrorResponse("An error occurred while creating the customer", exception: ex);
             }
         }
 
@@ -67,19 +62,13 @@ namespace app_otl.Controllers
                     "SELECT Id, Name, Email, CreatedAt, UpdatedAt FROM Customers ORDER BY CreatedAt DESC"
                 );
                 
-                return Ok(new ApiResponse<IEnumerable<dynamic>>(customers));
+                return SuccessResponse(customers);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to retrieve customers");
                 
-                return StatusCode(500, new ProblemDetails
-                {
-                    Title = "Internal Server Error", 
-                    Status = 500,
-                    Detail = "An error occurred while retrieving customers",
-                    Instance = HttpContext.Request.Path
-                });
+                return InternalServerErrorResponse("An error occurred while retrieving customers", exception: ex);
             }
         }
 
@@ -98,28 +87,16 @@ namespace app_otl.Controllers
                 
                 if (customer == null)
                 {
-                    return NotFound(new ProblemDetails
-                    {
-                        Title = "Customer Not Found",
-                        Status = 404,
-                        Detail = $"Customer with ID '{id}' was not found",
-                        Instance = HttpContext.Request.Path
-                    });
+                    return NotFoundResponse($"Customer with ID '{id}' was not found");
                 }
                 
-                return Ok(new ApiResponse<dynamic>(customer));
+                return SuccessResponse(customer);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to retrieve customer {CustomerId}", id);
                 
-                return StatusCode(500, new ProblemDetails
-                {
-                    Title = "Internal Server Error",
-                    Status = 500,
-                    Detail = "An error occurred while retrieving the customer",
-                    Instance = HttpContext.Request.Path
-                });
+                return InternalServerErrorResponse("An error occurred while retrieving the customer", exception: ex);
             }
         }
     }
