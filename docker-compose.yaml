@@ -7,12 +7,10 @@ services:
     ports:
       - "16686:16686"
       - "14250:14250"
+      - "4317:4317"
+      - "4318:4318"
     environment:
       - COLLECTOR_OTLP_ENABLED=true
-      - COLLECTOR_ZIPKIN_HTTP_PORT=0
-      - JAEGER_GRPC_ENABLED=true
-      - JAEGER_HTTP_ENABLED=true
-      - JAEGER_UDP_ENABLED=false
 
   otlcollector:
     build:
@@ -78,6 +76,8 @@ services:
       - "8888:8888"
     env_file:
       - .env
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otlcollector:4318
     volumes:
       - ./logs:/app/logs
     depends_on:
@@ -94,6 +94,8 @@ services:
       - "8080:80"
     env_file:
       - .env
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otlcollector:4318
     volumes:
       - ./logs:/app/logs
     depends_on:

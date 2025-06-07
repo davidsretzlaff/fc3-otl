@@ -1,4 +1,4 @@
-# Receivers - aceita logs OpenTelemetry via HTTP e gRPC
+# Receivers - aceita logs e traces OpenTelemetry via HTTP e gRPC
 receivers:
   otlp:
     protocols:
@@ -32,15 +32,29 @@ processors:
 
 # Exporters
 exporters:
+  # Exporter para Loki (logs)
   otlphttp:
     endpoint: "http://loki:3100/otlp"
+    tls:
+      insecure: true
+
+  # Exporter para Jaeger (traces) via OTLP
+  otlp/jaeger:
+    endpoint: "jaeger:4317"
     tls:
       insecure: true
 
 # Pipeline FINAL
 service:
   pipelines:
+    # Pipeline para logs
     logs:
       receivers: [otlp, filelog]
       processors: [transform, batch]
-      exporters: [otlphttp] 
+      exporters: [otlphttp]
+    
+    # Pipeline para traces 
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/jaeger] 
