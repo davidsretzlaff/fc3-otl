@@ -7,68 +7,40 @@ receivers:
       http:
         endpoint: 0.0.0.0:4318
 
-  # Receptor para logs de arquivos - SIMPLIFICADO
+  # SIMPLIFICADO: Receptor para logs de arquivos JSON
   filelog:
     include: ["/logs/*.log"]
     start_at: beginning
     operators:
-      # Parser JSON simples
       - type: json_parser
         parse_from: body
         parse_to: attributes
-
-      # Configurar timestamp
-      - type: time_parser
-        parse_from: attributes.time
-        layout: '%Y-%m-%dT%H:%M:%SZ'
-
-      # Configurar severity
-      - type: severity_parser
-        parse_from: attributes.level
-
-      # Move msg para body
       - type: move
         from: attributes.msg
         to: body
 
-# Processors - processa telemetria
+# Processors MÍNIMOS
 processors:
   batch:
 
-  # Transform processor SIMPLIFICADO
-  # ABORDAGEM: Structured Metadata para correlation_id (não label)
+  # Transform: apenas mapear service para service.name 
   transform:
     log_statements:
       - context: log
         statements:
-          # Apenas mapear service para service.name (o único label que queremos)
           - set(resource.attributes["service.name"], attributes["service"]) where attributes["service"] != nil
-          
-          # correlation_id fica como log attribute = structured metadata automaticamente
 
-  # Resource processor para adicionar environment
-  resource:
-    attributes:
-      - key: environment
-        value: "development"
-        action: insert
-
-# Exporters - envia dados para destinos usando OTLP nativo do Loki
+# Exporters
 exporters:
-  # OTLP HTTP direto para o endpoint nativo do Loki
   otlphttp:
     endpoint: "http://loki:3100/otlp"
     tls:
       insecure: true
 
-  # Debug exporter
-  debug:
-    verbosity: detailed
-
-# Pipeline - SIMPLIFICADO
+# Pipeline FINAL
 service:
   pipelines:
     logs:
       receivers: [otlp, filelog]
-      processors: [transform, resource, batch]
-      exporters: [otlphttp, debug] 
+      processors: [transform, batch]
+      exporters: [otlphttp] 

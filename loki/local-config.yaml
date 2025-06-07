@@ -29,12 +29,8 @@ limits_config:
   allow_structured_metadata: true
   volume_enabled: true
 
-# Configuração do distributor para OTLP
-# BEST PRACTICE: Usar apenas labels de baixa cardinalidade
-# correlation_id será structured metadata (não label) para melhor performance
+# OTLP Config MÍNIMO: apenas service.name como label
 distributor:
   otlp_config:
     default_resource_attributes_as_index_labels:
-      - "service.name"
-      - "service.namespace" 
-      - "deployment.environment" 
+      - "service.name" 
