@@ -1,60 +1,22 @@
-# Receivers - aceita logs e traces OpenTelemetry via HTTP e gRPC
+# Configuração SUPER SIMPLES do OpenTelemetry Collector
 receivers:
   otlp:
     protocols:
-      grpc:
-        endpoint: 0.0.0.0:4317
       http:
         endpoint: 0.0.0.0:4318
 
-  # SIMPLIFICADO: Receptor para logs de arquivos JSON
-  filelog:
-    include: ["/logs/*.log"]
-    start_at: beginning
-    operators:
-      - type: json_parser
-        parse_from: body
-        parse_to: attributes
-      - type: move
-        from: attributes.msg
-        to: body
-
-# Processors MÍNIMOS
 processors:
   batch:
 
-  # Transform: apenas mapear service para service.name 
-  transform:
-    log_statements:
-      - context: log
-        statements:
-          - set(resource.attributes["service.name"], attributes["service"]) where attributes["service"] != nil
-
-# Exporters
 exporters:
-  # Exporter para Loki (logs)
   otlphttp:
-    endpoint: "http://loki:3100/otlp"
+    endpoint: http://jaeger:4318
     tls:
       insecure: true
 
-  # Exporter para Jaeger (traces) via OTLP
-  otlp/jaeger:
-    endpoint: "jaeger:4317"
-    tls:
-      insecure: true
-
-# Pipeline FINAL
 service:
   pipelines:
-    # Pipeline para logs
-    logs:
-      receivers: [otlp, filelog]
-      processors: [transform, batch]
-      exporters: [otlphttp]
-    
-    # Pipeline para traces 
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [otlp/jaeger] 
+      exporters: [otlphttp] 

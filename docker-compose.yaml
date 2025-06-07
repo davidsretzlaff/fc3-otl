@@ -7,8 +7,6 @@ services:
     ports:
       - "16686:16686"
       - "14250:14250"
-      - "4317:4317"
-      - "4318:4318"
     environment:
       - COLLECTOR_OTLP_ENABLED=true
 
@@ -19,6 +17,7 @@ services:
     container_name: otlcollector
     ports:
       - "4318:4318"
+      - "4317:4317"
       - "8889:8889"
     volumes:
       - ./logs:/logs
@@ -78,6 +77,7 @@ services:
       - .env
     environment:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otlcollector:4318
+      - OTEL_SERVICE_NAME=payments-subscription
     volumes:
       - ./logs:/app/logs
     depends_on:
@@ -96,6 +96,7 @@ services:
       - .env
     environment:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otlcollector:4318
+      - OTEL_SERVICE_NAME=payments-customer
     volumes:
       - ./logs:/app/logs
     depends_on:
