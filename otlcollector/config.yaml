@@ -7,20 +7,24 @@ receivers:
       http:
         endpoint: 0.0.0.0:4318
 
-  # Receptor para logs de arquivos
+  # Receptor para logs de arquivos - SIMPLIFICADO
   filelog:
     include: ["/logs/*.log"]
     start_at: beginning
     operators:
-      # Parser JSON para logs estruturados
+      # Parser JSON simples
       - type: json_parser
-        id: json_parser
-        timestamp:
-          parse_from: attributes.time
-          layout: '%Y-%m-%dT%H:%M:%SZ'
-        severity:
-          parse_from: attributes.level
-        on_error: send
+        parse_from: body
+        parse_to: attributes
+
+      # Configurar timestamp
+      - type: time_parser
+        parse_from: attributes.time
+        layout: '%Y-%m-%dT%H:%M:%SZ'
+
+      # Configurar severity
+      - type: severity_parser
+        parse_from: attributes.level
 
       # Move msg para body
       - type: move
@@ -31,55 +35,40 @@ receivers:
 processors:
   batch:
 
-  # Transform processor para criar labels para o Loki
+  # Transform processor SIMPLIFICADO
+  # ABORDAGEM: Structured Metadata para correlation_id (não label)
   transform:
     log_statements:
       - context: log
         statements:
-          # Normalizar níveis de log
-          - set(severity_text, "info") where severity_text == "information"
-          - set(severity_text, "warn") where severity_text == "warning"
-          - set(severity_text, "error") where severity_text == "critical"
+          # Apenas mapear service para service.name (o único label que queremos)
+          - set(resource.attributes["service.name"], attributes["service"]) where attributes["service"] != nil
           
-          # Garantir que sempre temos labels básicos
-          - set(attributes["service"], Coalesce(attributes["service"], "unknown")) 
-          - set(attributes["level"], Coalesce(severity_text, "info"))
-          
-          # Extrair correlation_id se existir
-          - set(attributes["correlation_id"], attributes["correlation_id"]) where attributes["correlation_id"] != nil
+          # correlation_id fica como log attribute = structured metadata automaticamente
 
-  # Resource processor para adicionar labels de ambiente
+  # Resource processor para adicionar environment
   resource:
     attributes:
       - key: environment
         value: "development"
         action: insert
 
-# Exporters - envia dados para destinos
+# Exporters - envia dados para destinos usando OTLP nativo do Loki
 exporters:
-  # Exporter Loki nativo com labels obrigatórios
-  loki:
-    endpoint: "http://loki:3100/loki/api/v1/push"
+  # OTLP HTTP direto para o endpoint nativo do Loki
+  otlphttp:
+    endpoint: "http://loki:3100/otlp"
     tls:
       insecure: true
-    labels:
-      resource:
-        # Labels baseados em resource attributes
-        environment: "environment"
-      attributes:
-        # Labels baseados em log attributes
-        service: "service"
-        level: "level"
-        correlation_id: "correlation_id"
 
-  # Debug exporter para ver logs
+  # Debug exporter
   debug:
     verbosity: detailed
 
-# Pipeline - conecta receivers -> processors -> exporters  
+# Pipeline - SIMPLIFICADO
 service:
   pipelines:
     logs:
       receivers: [otlp, filelog]
       processors: [transform, resource, batch]
-      exporters: [loki, debug] 
+      exporters: [otlphttp, debug] 
