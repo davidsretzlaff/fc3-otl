@@ -83,7 +83,7 @@ func (l *StructuredLogger) Close() error {
 // logJSON registra uma entrada de log em formato JSON
 func (l *StructuredLogger) logJSON(ctx context.Context, level LogLevel, message string) {
 	entry := LogEntry{
-		Time:          time.Now().UTC().Format(time.RFC3339),
+		Time:          time.Now().UTC().Format(time.RFC3339Nano),
 		Level:         string(level),
 		Message:       message,
 		CorrelationID: GetCorrelationID(ctx),

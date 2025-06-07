@@ -30,12 +30,12 @@ Log.Logger = new LoggerConfiguration()
     
     // ENRIQUECER logs com informações de contexto
     .Enrich.FromLogContext()
-    .Enrich.WithProperty("service", "customer")
+    .Enrich.WithProperty("service", "customer-service")
     
     // ESCRITOR DUPLO: Console + Arquivo
     .WriteTo.Console(new CustomJsonFormatter())
     .WriteTo.File(new CustomJsonFormatter(), 
-        path: "/app/logs/customer{Date}.log",
+        path: "/app/logs/customer-service.log",
         rollingInterval: RollingInterval.Day,
         rollOnFileSizeLimit: true,
         fileSizeLimitBytes: 10485760,
@@ -117,7 +117,7 @@ public class CustomJsonFormatter : ITextFormatter
     {
         var logObject = new
         {
-            time = logEvent.Timestamp.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            time = logEvent.Timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ"),
             level = logEvent.Level.ToString().ToLower(),
             msg = logEvent.RenderMessage(),
             correlation_id = logEvent.Properties.ContainsKey("correlation_id") 
@@ -125,7 +125,7 @@ public class CustomJsonFormatter : ITextFormatter
                 : "",
             service = logEvent.Properties.ContainsKey("service") 
                 ? logEvent.Properties["service"].ToString().Trim('"') 
-                : "customer"
+                : "customer-service"
         };
 
         var json = JsonSerializer.Serialize(logObject);

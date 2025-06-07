@@ -279,7 +279,7 @@ func (s *SubscriptionService) toSubscriptionResponse(subscription *Subscription)
 		PlanID:     subscription.PlanID().String(),
 		CustomerID: subscription.CustomerID().String(),
 		Status:     string(subscription.Status()),
-		CreatedAt:  subscription.CreatedAt().Format("2006-01-02T15:04:05Z07:00"),
-		UpdatedAt:  subscription.UpdatedAt().Format("2006-01-02T15:04:05Z07:00"),
+		CreatedAt:  subscription.CreatedAt().Format(time.RFC3339Nano),
+		UpdatedAt:  subscription.UpdatedAt().Format(time.RFC3339Nano),
 	}
 }
