@@ -1,68 +1,85 @@
+# Receivers - aceita logs OpenTelemetry via HTTP e gRPC
 receivers:
   otlp:
     protocols:
-      http:
-        endpoint: 0.0.0.0:4318
       grpc:
         endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
 
+  # Receptor para logs de arquivos
   filelog:
-    include: [ "/logs/*.log" ]
+    include: ["/logs/*.log"]
     start_at: beginning
     operators:
+      # Parser JSON para logs estruturados
       - type: json_parser
+        id: json_parser
         timestamp:
-          parse_from: time
-          layout: '%Y-%m-%d %H:%M:%S'
+          parse_from: attributes.time
+          layout: '%Y-%m-%dT%H:%M:%SZ'
+        severity:
+          parse_from: attributes.level
+        on_error: send
 
+      # Move msg para body
+      - type: move
+        from: attributes.msg
+        to: body
+
+# Processors - processa telemetria
 processors:
-  transform/mask_credit_cards:
-    trace_statements:
-      - context: span
-        statements:
-          - replace_pattern(attributes["http.response.body"], "(\\d{4})-(\\d{4})-(\\d{4})-", "xxxx-xxx-xxxx-")
-   
   batch:
-    timeout: 1s
-    send_batch_size: 1024
 
+  # Transform processor para criar labels para o Loki
+  transform:
+    log_statements:
+      - context: log
+        statements:
+          # Normalizar níveis de log
+          - set(severity_text, "info") where severity_text == "information"
+          - set(severity_text, "warn") where severity_text == "warning"
+          - set(severity_text, "error") where severity_text == "critical"
+          
+          # Garantir que sempre temos labels básicos
+          - set(attributes["service"], Coalesce(attributes["service"], "unknown")) 
+          - set(attributes["level"], Coalesce(severity_text, "info"))
+          
+          # Extrair correlation_id se existir
+          - set(attributes["correlation_id"], attributes["correlation_id"]) where attributes["correlation_id"] != nil
+
+  # Resource processor para adicionar labels de ambiente
+  resource:
+    attributes:
+      - key: environment
+        value: "development"
+        action: insert
+
+# Exporters - envia dados para destinos
 exporters:
-  # Exporter para debug (logs)
-  logging:
-    verbosity: detailed
-    sampling_initial: 5
-    sampling_thereafter: 200
-
-  # Exporter para o Jaeger via OTLP
-  otlp:
-    endpoint: jaeger:4317
-    tls:
-      insecure: true
-
-  # Exporter para Prometheus
-  prometheus:
-    endpoint: "0.0.0.0:8889"
-
-  # Exporter para Loki
+  # Exporter Loki nativo com labels obrigatórios
   loki:
     endpoint: "http://loki:3100/loki/api/v1/push"
-    tenant_id: "example"
+    tls:
+      insecure: true
     labels:
+      resource:
+        # Labels baseados em resource attributes
+        environment: "environment"
       attributes:
-        container_name: "service_name"
-        level: "severity"
+        # Labels baseados em log attributes
+        service: "service"
+        level: "level"
+        correlation_id: "correlation_id"
 
+  # Debug exporter para ver logs
+  debug:
+    verbosity: detailed
+
+# Pipeline - conecta receivers -> processors -> exporters  
 service:
   pipelines:
-    traces:
-      receivers: [otlp]
-      processors: [transform/mask_credit_cards]
-      exporters: [logging, otlp]
-    metrics:
-      receivers: [otlp]
-      processors: [batch]
-      exporters: [prometheus]
     logs:
       receivers: [otlp, filelog]
-      processors: [batch]
-      exporters: [loki, logging] 
+      processors: [transform, resource, batch]
+      exporters: [loki, debug] 

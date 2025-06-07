@@ -44,22 +44,8 @@ services:
     depends_on:
       - otlcollector
 
-  promtail:
-    build:
-      context: ./promtail
-      dockerfile: Dockerfile
-    container_name: promtail
-    volumes:
-      - ./promtail:/etc/promtail
-      - ./logs:/var/log/app
-      - /var/run/docker.sock:/var/run/docker.sock
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-    command: -config.file=/etc/promtail/config.yaml
-    depends_on:
-      - loki
-
   loki:
-    image: grafana/loki:2.9.0
+    image: grafana/loki:3.5.0
     container_name: loki
     ports:
       - "3100:3100"
@@ -70,15 +56,16 @@ services:
     user: "10001"
 
   grafana:
-    image: grafana/grafana:10.0.3
+    image: grafana/grafana:11.0.0
     container_name: grafana
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
     depends_on:
       - prometheus
       - loki

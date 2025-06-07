@@ -32,8 +32,14 @@ Log.Logger = new LoggerConfiguration()
     .Enrich.FromLogContext()
     .Enrich.WithProperty("service", "customer")
     
-    // Formatter JSON customizado
+    // ESCRITOR DUPLO: Console + Arquivo
     .WriteTo.Console(new CustomJsonFormatter())
+    .WriteTo.File(new CustomJsonFormatter(), 
+        path: "/app/logs/customer{Date}.log",
+        rollingInterval: RollingInterval.Day,
+        rollOnFileSizeLimit: true,
+        fileSizeLimitBytes: 10485760,
+        retainedFileCountLimit: 10)
     
     .CreateLogger();
 
@@ -76,6 +82,9 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 app.MapGet("/", () => "Customer Service is running!");
 
 // INICIALIZAÇÃO SILENCIOSA
+Log.Information("Customer Service starting up...");
+Log.Information("Environment: {Environment}", app.Environment.EnvironmentName);
+
 app.Run("http://0.0.0.0:80");
 
 void InitializeDatabase()
