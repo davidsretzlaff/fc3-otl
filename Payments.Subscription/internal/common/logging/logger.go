@@ -42,7 +42,7 @@ func NewStructuredLogger(serviceName string) *StructuredLogger {
 	}
 
 	// Criar diretório de logs se não existir
-	logDir := "/app/logs"
+	logDir := "/app/logs/apps"
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: Failed to create log directory: %v\n", err)
 		// Fallback para stdout se não conseguir criar diretório

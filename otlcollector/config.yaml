@@ -1,14 +1,19 @@
-# Configuração SUPER SIMPLES do OpenTelemetry Collector
+# Configuração SUPER SIMPLES - OTLP COMPLETO
 receivers:
   otlp:
     protocols:
       http:
         endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
 
 processors:
   batch:
+    timeout: 1s
+    send_batch_size: 1024
 
 exporters:
+  # Jaeger para traces
   otlphttp:
     endpoint: http://jaeger:4318
     tls:
@@ -19,4 +24,4 @@ service:
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [otlphttp] 
+      exporters: [otlphttp]

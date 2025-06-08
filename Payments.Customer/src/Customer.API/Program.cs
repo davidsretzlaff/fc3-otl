@@ -35,14 +35,24 @@ Log.Logger = new LoggerConfiguration()
     .Enrich.FromLogContext()
     .Enrich.WithProperty("service", "customer-service")
     
-    // ESCRITOR DUPLO: Console + Arquivo
+    // ESCRITOR TRIPLO: Console + Arquivo + OTLP
     .WriteTo.Console(new CustomJsonFormatter())
     .WriteTo.File(new CustomJsonFormatter(), 
-        path: "/app/logs/customer-service.log",
+        path: "/app/logs/apps/customer-service.log",
         rollingInterval: RollingInterval.Day,
         rollOnFileSizeLimit: true,
         fileSizeLimitBytes: 10485760,
         retainedFileCountLimit: 10)
+    .WriteTo.OpenTelemetry(options =>
+    {
+        options.Endpoint = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT") ?? "http://otlcollector:4318";
+        options.Protocol = Serilog.Sinks.OpenTelemetry.OtlpProtocol.HttpProtobuf;
+        options.ResourceAttributes = new Dictionary<string, object>
+        {
+            ["service.name"] = "customer-service",
+            ["service.version"] = "1.0.0"
+        };
+    })
     
     .CreateLogger();
 
